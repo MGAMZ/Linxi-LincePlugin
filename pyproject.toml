@@ -12,11 +12,18 @@ license = "MIT"
 authors = [
     { name = "mgam", email = "312065559@qq.com" }
 ]
-dependencies = []
+dependencies = [
+    # WF baseline decoder (decode_baseline)
+    "scikit-learn",
+]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+]
+gru = [
+    # GRU baseline decoder; plain "torch" = device-neutral wheel choice, no CUDA flavor pin
+    "torch",
 ]
 
 [tool.hatch.build.targets.wheel]
