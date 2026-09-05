@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -262,6 +261,85 @@ def test_decode_context_mode_matches_golden_and_writes_predictions():
         assert series.data.dtype == np.float32
     notes = json.loads(context.notes)["lince_baseline_decode"]
     assert notes["sessions"][0]["session_id"] == EASY_SESSION
+
+
+@needs_dataset
+def test_decode_context_mode_masks_out_of_trial_bins():
+    import pandas as pd
+    from linxi.fabric.linxi_context import LinxiContext
+    import spikeinterface.core as si
+    from linshu_format.core import EcephysRecording, TimeIntervals, TimeSeries
+    from linxi_linceplugin import decode_engine
+    from linxi_linceplugin.decode_baseline import BaselineDecodeInfer
+
+    rng = np.random.default_rng(11)
+
+    def fabricate(name, n_trials, junk_before, junk_after, trial_ids_start):
+        bins_per_trial = 30
+        n_bins = junk_before + n_trials * bins_per_trial + junk_after
+        timestamps = 100.0 + np.arange(n_bins, dtype=np.float64) * 0.02
+        x = rng.integers(0, 5, size=(n_bins, 512)).astype(np.float32)
+        y = rng.normal(size=(n_bins, 2)).astype(np.float32)
+        x[:junk_before] *= 40
+        x[junk_before + n_trials * bins_per_trial:] *= 40
+        y[:junk_before] += 60.0
+        y[junk_before + n_trials * bins_per_trial:] += 60.0
+        trial_ids = np.full(n_bins, -1, dtype=np.int64)
+        starts, stops = [], []
+        for k in range(n_trials):
+            lo = junk_before + k * bins_per_trial
+            hi = lo + bins_per_trial - 1
+            trial_ids[lo : hi + 1] = trial_ids_start + k
+            starts.append(timestamps[lo])
+            stops.append(timestamps[hi])
+        rec = EcephysRecording.from_spikeinterface_recording(
+            si.NumpyRecording(x, sampling_frequency=50.0), name=name, unit="spike counts",
+        )
+        rec.electrophysiology.timestamps = timestamps
+        rec.auxiliary_channels["cursor_vel_x"] = TimeSeries(
+            name="cursor_vel_x", data=y[:, 0], timestamps=timestamps,
+        )
+        rec.auxiliary_channels["cursor_vel_y"] = TimeSeries(
+            name="cursor_vel_y", data=y[:, 1], timestamps=timestamps,
+        )
+        rec.events = TimeIntervals(
+            name=f"{name}_trials",
+            table=pd.DataFrame({"start_time": starts, "stop_time": stops,
+                                "trial_id": range(trial_ids_start,
+                                                  trial_ids_start + n_trials)}),
+        )
+        return rec, x, y, trial_ids, timestamps
+
+    query, xq, yq, qids, qts = fabricate("query", 3, 6, 6, 7)
+    support, xs, ys, sids, _ = fabricate("support", 2, 4, 4, 50)
+    context = LinxiContext(file_create_date=datetime.now())
+    context.ecephys["query"] = query
+    context.ecephys["support"] = support
+
+    op = BaselineDecodeInfer(model="wf", source="context", task="MA_CO", level="easy",
+                             session_key="synthetic", strict_trial_counts=False)
+    context = op(context)
+    (row,) = op.session_results
+
+    in_trial = int((qids >= 0).sum())
+    assert row["n_bins"] == in_trial == 90
+
+    aux = context.ecephys["query"].auxiliary_channels
+    for key in ("cursor_vel_pred_x", "cursor_vel_pred_y"):
+        assert aux[key].data.shape == (in_trial,)
+        assert len(aux[key].timestamps) == in_trial
+
+    weights = decode_engine.default_weights_dir(decode_engine.DEFAULT_DATA_ROOT, "wf")
+    expected, _ = decode_engine.run_session(
+        task_name="MA_CO", level="easy", horizon=None, session_key="synthetic",
+        x_query=xq[qids >= 0], y_query=yq[qids >= 0],
+        x_support=xs[sids >= 0], y_support=ys[sids >= 0],
+        submission_factory=lambda: decode_engine.make_submission(
+            "wf", decode_engine.DEFAULT_BASELINE_CODE_PATH, weights
+        ),
+    )
+    for field in ("r2_x", "r2_y", "r2_mean_raw", "r2_mean"):
+        assert row[field] == expected[field], (field, row[field], expected[field])
 
 
 # ---------------------------------------------------------------- read-only QA

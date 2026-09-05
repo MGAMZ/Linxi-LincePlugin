@@ -19,7 +19,6 @@ GRU 需要 torch（可选依赖组 ``[gru]``）及其 CUDA 环境；WF 仅 CPU/n
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -101,7 +100,7 @@ def _session_arrays(context: Any, side: str):
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.POSTPROCESS)
 class BaselineDecodeInfer(DefaultProcessor):
-    PROCESSOR_NAME = "BaselineDecodeInfer"
+    PROCESSOR_NAME = "BaselineDecodeInfer"  # 注册名 = PROCESSOR_NAME（缺省回退类名，registry.py:32-33）；显式声明以稳定 YAML 契约
 
     def __init__(
         self,
@@ -190,9 +189,13 @@ class BaselineDecodeInfer(DefaultProcessor):
             )
             if overlap:
                 raise ValueError(f"Support/query trial_id overlap: {overlap[:10]}")
+            x_support, y_support = decode_engine.trial_only(x_support, y_support,
+                                                            support_trial_ids)
         else:
             x_support = np.empty((0, x_query.shape[1]), dtype=np.float32)
             y_support = np.empty((0, 2), dtype=np.float32)
+        query_mask = query_trial_ids >= 0
+        x_query, y_query = decode_engine.trial_only(x_query, y_query, query_trial_ids)
 
         result, prediction = decode_engine.run_session(
             task_name=self.task,
@@ -209,13 +212,12 @@ class BaselineDecodeInfer(DefaultProcessor):
             weights_check=weights_check,
         )
 
-        mask = query_trial_ids >= 0
         velocity_unit = context.ecephys[QUERY_KEY].auxiliary_channels[VELOCITY_X].unit
         for key, column in ((PREDICTED_X, prediction[:, 0]), (PREDICTED_Y, prediction[:, 1])):
             context.ecephys[QUERY_KEY].auxiliary_channels[key] = TimeSeries(
                 name=key,
                 data=np.ascontiguousarray(column, dtype=np.float32),
-                timestamps=query_timestamps[mask],
+                timestamps=query_timestamps[query_mask],
                 unit=velocity_unit,
             )
         return [result]
