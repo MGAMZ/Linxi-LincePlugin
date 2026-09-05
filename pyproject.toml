@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "Linxi-LincePlugin"
+version = "0.1.0"
+description = "临策算法竞赛通用算子插件仓库"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [
+    { name = "mgam", email = "312065559@qq.com" }
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["linxi_linceplugin"]
+
+[tool.hatch.build]
+include = [
+    "linxi_linceplugin/**/*.py",
+    "tests/**/*.py",
+    "README.md",
+    "NEXTSTEPS.md",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
