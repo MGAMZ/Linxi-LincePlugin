@@ -39,7 +39,7 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-`pip install -e ".[dev]"` 装插件本体并带出必选依赖 `scikit-learn` 与开发依赖 `pytest`。自检预期全绿；复现基准（本机，无 torch 环境）为 `46 passed, 1 skipped`，skip 项是 GRU 测试随 torch 缺失自动跳过，不算失败。
+`pip install -e ".[dev]"` 装插件本体并带出必选依赖 `scikit-learn` 与开发依赖 `pytest`。自检预期全绿；复现基准（本机，无 torch 环境）为 `47 passed, 1 skipped`，skip 项是 GRU 测试随 torch 缺失自动跳过，不算失败。
 
 ## 依赖说明
 
