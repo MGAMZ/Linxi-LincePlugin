@@ -1,21 +1,4 @@
-"""临策赛道 LinshuFile 导出接线：EXPORT 阶段薄适配算子。
-
-职责限定为表示层：把 context 内的解码结果结构整理为上游 ``WriteLinshuFile`` 的输入契约
-（前置断言、ragged→padding 列规范、有损字段策略），随后组合调用上游算子完成落盘；
-不做自定义序列化、不落盘旁路、不提供 CLI。
-
-trials 表列契约（任务 11/12 消费）
----------------------------------
-- 必备列 ``start_time``/``stop_time``（``TimeIntervals`` schema 校验器保证）；
-  主维度名取 ``start_time`` 的第 0 维（平台惯例 ``"event"``）。
-- ragged 逐 bin 数值列：object dtype 一维列、元素为形状 ``(n_i,)`` 或 ``(n_i, k)``
-  的数值 ndarray → 替换为 float64 padding 列（dims ``event × <name>_bin [× <name>_coord]``，
-  NaN 填充），并追加 int64 列 ``<name>_valid_len``（trial 有效 bin 数）。
-- session 级标量：上游算子按 trial 广播进 trials 列、经 ``session_scalar_cols`` 声明；
-  根级无指标容器（task-2 缺口 G1），本算子保留该列并按"挪位"报结构化 WARNING。
-- 无法表达的字段（嵌套 dict 等，G2）：默认丢弃并逐字段 WARNING；
-  ``on_lossy="fail"`` 时直接失败。任何路径都不静默有损。
-"""
+"""临策赛道 LinshuFile 导出接线（EXPORT 阶段）：把流水线中的记录与评测结果写出为 ``.ls`` 产物。"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -38,7 +21,7 @@ _NUMERIC_KINDS = frozenset("biuf")
 
 
 class LinceExportError(RuntimeError):
-    """导出接线的前置条件或产物断言失败；替代上游 writer 的静默跳过路径。"""
+    """导出接线的前置条件或产物断言失败。"""
 
 
 def _classify_object_column(arr: np.ndarray) -> str:
@@ -96,9 +79,9 @@ class LinceWriteLinshuFile(DefaultProcessor):
     output_path / chunk_frames / write_workers / unit / overwrite / skip_fields /
     skip_raw_signals :
         原样透传给组合的上游 ``WriteLinshuFile``；``unit`` 保持上游固定 ``"volts"`` 语义
-        （赛题 binned_spikes 为计数的类型缺口见 task-2 G10，本算子不擅自改单位）。
+        （赛题 binned_spikes 实为计数）。
     ecephys_key : str
-        信号槽键，临策双记录布局默认 ``"query"``（task-1 §6）。
+        信号槽键，临策双记录布局默认 ``"query"``。
     session_scalar_cols : list[str] | None
         trials 表中按 trial 广播的 session 级标量列名；逐列做常量校验并按有损策略上报。
     on_lossy : {"warn", "fail"}
@@ -153,8 +136,8 @@ class LinceWriteLinshuFile(DefaultProcessor):
     def _check_signal_slots(self, context: LinxiContext) -> None:
         if context.recording is None:
             raise LinceExportError(
-                "context.recording 为 None：上游 WriteLinshuFile 对该情形只 logger.warning 跳过写出"
-                "（linshu_writer.py:97-100），本接线层将其转为失败。请确认 load 算子已构建 recording 槽。"
+                "context.recording 为 None：上游 WriteLinshuFile 对该情形只告警跳过写出，"
+                "本接线层将其转为失败。请确认 load 算子已构建 recording 槽。"
             )
         slot = context.ecephys.get(self.ecephys_key)
         if slot is None:
@@ -165,7 +148,7 @@ class LinceWriteLinshuFile(DefaultProcessor):
         if slot.electrophysiology is None and not slot.auxiliary_channels:
             raise LinceExportError(
                 f"ecephys[{self.ecephys_key!r}] 为空占位（electrophysiology=None 且 auxiliary_channels 空），"
-                "落盘只会得到 _linshu_type 空壳；信号槽须由载入链预填（task-2 G5）"
+                "落盘只会得到 _linshu_type 空壳；信号槽须由 load 算子预填"
             )
 
     def _normalize_trials(self, context: LinxiContext) -> None:
@@ -224,14 +207,14 @@ class LinceWriteLinshuFile(DefaultProcessor):
     def _apply_lossy_policy(self, *, dropped: list[str], relocated: list[str]) -> None:
         if dropped:
             msg = (
-                "dropped 无法用 LinshuFile 表达的字段（根级自由 metadata 袋缺失，task-2 缺口 G2；"
-                f"对象列元素非字符串/非一致形状数值数组）: {sorted(dropped)}"
+                "dropped 无法用 LinshuFile 表达的字段"
+                f"（对象列元素非字符串/非一致形状数值数组）: {sorted(dropped)}"
             )
             if self._on_lossy == "fail":
                 raise LinceExportError(msg)
             logger.warning(f"LinceWriteLinshuFile[lossy=warn] {msg}")
         if relocated:
-            msg = f"relocated 无处安放的 session 级标量（根级指标容器缺失，G1），以 trials 广播列保留而非丢弃: {', '.join(relocated)}"
+            msg = f"relocated session 级标量以 trials 广播列保留（LinshuFile 根级无指标容器）: {', '.join(relocated)}"
             if self._on_lossy == "fail":
                 raise LinceExportError(msg)
             logger.warning(f"LinceWriteLinshuFile[lossy=warn] {msg}")

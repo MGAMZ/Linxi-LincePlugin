@@ -1,19 +1,8 @@
-"""赛题 NWB → 临析内部表示的载入算子。
+"""赛题 NWB → 临析内部表示的载入算子（LOAD 阶段）。
 
-赛题神经输入是 ``acquisition/binned_spikes``（uint8 计数普通 TimeSeries），文件内没有
-ElectricalSeries / electrodes / units 表，上游 ``LoadNWB`` 对这类文件不可用；本算子自研
-pynwb 只读载入，把三域投影到 LinshuFile 声明字段：
-
-- X (T,512) uint8 → ``ecephys[recording_key].electrophysiology``（真实绝对时间戳写入
-  ``TimeSeries.timestamps``，不伪造均匀网格）＋ spikeinterface 活槽 ``context.recording``（仅 query 侧）；
-- cursor_vel x/y、cursor_pos x/y、eval_mask → ``auxiliary_channels``，dtype 与单位保真；
-- intervals/trials → 该记录的 ``events``（query 侧同步写顶层 ``context.trials``），
-  start/stop 保留原始绝对 epoch 秒，trial_id 规整为 int64。
-
-``input_path`` 必须逐步骤显式传参：本算子不读也不写 ``context.run_state.input_path``，
-同一 pipeline 内 query / support 两个 load 步骤因此互不污染。
-
-session 标识由 NWB 所在目录相对 ``data_root`` 的路径派生（赛题文件 ``nwbfile.session_id=None``）。
+读取 session NWB 的发放矩阵、光标信号与 trial 表，写入 ``context.ecephys[recording_key]``；
+query 侧同步写顶层 ``context.recording`` 与 ``context.trials``。
+session 标识由 NWB 所在目录相对 ``data_root`` 的路径派生。
 """
 
 from __future__ import annotations
@@ -68,7 +57,7 @@ def _read_time_series(series: object, label: str, path: Path) -> tuple[np.ndarra
 
 
 def read_lince_nwb(nwb_path: str | Path) -> LinceSessionArrays:
-    """按平台 loader（data.py:158-203）同一口径只读物化一个赛题 session。"""
+    """与平台 loader 同一口径，只读物化一个赛题 session。"""
     path = Path(nwb_path)
     if not path.is_file():
         raise FileNotFoundError(f"Lince session NWB file not found: {path}")
@@ -134,7 +123,7 @@ def estimate_bin_rate(timestamps: np.ndarray) -> float:
 
 
 def project_bins_to_trials(timestamps: np.ndarray, trials: "pd.DataFrame") -> np.ndarray:
-    """bin→trial 投影，与平台 loader（data.py:181-188）逐位同语义：闭区间、按表序覆盖、表外为 -1。"""
+    """bin→trial 投影，与平台 loader 逐位同语义：闭区间、按表序覆盖、表外为 -1。"""
     trial_ids = np.full(len(timestamps), -1, dtype=np.int64)
     for row in trials.itertuples(index=False):
         mask = (timestamps >= row.start_time) & (timestamps <= row.stop_time)
@@ -180,14 +169,12 @@ class LoadLinceSession(DefaultProcessor):
         if self.input_path is None:
             raise ValueError(
                 "LoadLinceSession requires an explicit `input_path` processor param; "
-                "context.run_state.input_path is neither read nor written so that multiple "
-                "load steps in one pipeline stay independent."
+                "context.run_state.input_path is neither read nor written."
             )
         if self.data_root is None:
             raise ValueError(
                 "LoadLinceSession requires an explicit `data_root` processor param; the session "
-                "label is derived from the NWB directory relative to it, and the plugin ships "
-                "no machine-local default."
+                "label is derived from the NWB directory relative to it."
             )
         arrays = read_lince_nwb(self.input_path)
         rate = estimate_bin_rate(arrays.timestamps)

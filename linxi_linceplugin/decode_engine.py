@@ -1,12 +1,4 @@
-"""Baseline decode protocol engine: official-identical adapt/predict with preset weights.
-
-The session protocol (fresh model object per session, hard-level empty support semantics,
-predict-only latency timing, per-session R2 scoring from ``decode_scoring``) mirrors the
-official evaluation flow. The official baseline model classes and the platform NWB loader
-are imported at runtime from ``baseline_code_path``; no official source is vendored into
-this repository. Preset weight files are opened read-only and hash-verified unchanged
-after every adapt/predict call.
-"""
+"""赛道 baseline 解码协议引擎：以预置权重执行 adapt/predict 与逐 session 评分。"""
 
 from __future__ import annotations
 
@@ -221,12 +213,11 @@ def run_sweep(
     if baseline_code_path is None:
         raise ValueError(
             "run_sweep requires an explicit `baseline_code_path` argument (the challenge `challenge_code` "
-            "directory containing Platform/ and Participant/); the plugin ships no machine-local default."
+            "directory containing Platform/ and Participant/)."
         )
     if data_root is None:
         raise ValueError(
-            "run_sweep requires an explicit `data_root` argument (the challenge `challenge_data` directory); "
-            "the plugin ships no machine-local default."
+            "run_sweep requires an explicit `data_root` argument (the challenge `challenge_data` directory)."
         )
     weights = weights_dir or default_weights_dir(data_root, model)
     data = load_official_loader(baseline_code_path)

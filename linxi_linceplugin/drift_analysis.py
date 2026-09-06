@@ -1,13 +1,7 @@
-"""跨天漂移指标算子（ANALYZE 阶段，纯计算、不落盘；产物由 pipeline/runner 持久化）。
+"""跨天漂移指标算子（ANALYZE 阶段）：计算逐 session 漂移指标与聚合结果。
 
-指标口径 1:1 移植 `运动跨天解码/scripts/explore_data.py`（cos_raw、|norm_ratio-1|、
-cos_centered、pearson_gap_cos；行号引文见 ``_drift_core``）。``source`` 三态：
-``context`` 读任务 1 §6 的 ``ecephys`` 槽（X→electrophysiology 物化，质心取
-``centroid_key`` 若干记录逐通道均值或显式 ``centroid`` 向量，结果投影到
-``ecephys[k].channel_summary`` 自由列 + ``context.notes["lince_drift_analysis"]``）；
-``sessions`` 直传会话清单；``sweep`` 按 ``data_root`` 复刻脚本 collect_records
-（:143-152）的目录发现。gap_days 由目录名日期派生（赛题 session_id=None，task-1 坑位⑤）。
-本算子不读写 ``run_state.input_path``，不向数据根写入任何文件。
+``source`` 三态：``context`` 读流水线已载入的 ``ecephys`` 槽， ``sessions`` 直传会话清单，``sweep`` 扫描 ``data_root``。
+结果写入 ``ecephys[k].channel_summary``与 ``context.notes["lince_drift_analysis"]``。
 """
 
 from __future__ import annotations
@@ -41,7 +35,7 @@ SUMMARY_FIELDS = (
 
 
 def read_binned_spikes(nwb_path: str | Path) -> np.ndarray:
-    """pynwb 只读物化单 session 的 (T, 512) 发放矩阵（转置纠正同平台 loader data.py:158-203）。"""
+    """pynwb 只读物化单 session 的 (T, 512) 发放矩阵，行列与 timestamps 不一致时转置纠正。"""
     path = Path(nwb_path)
     with NWBHDF5IO(str(path), "r") as io:
         series = io.read().acquisition["binned_spikes"]
@@ -72,10 +66,10 @@ def discover_sweep_inputs(
     tasks: Sequence[str] | None = None,
     levels: Sequence[str] | None = None,
 ) -> list[tuple[str, str, str | None, str, Path]]:
-    """复刻 explore_data.py collect_records（:143-152）+ data.py discover 的会话发现。
+    """按数据根目录布局发现会话。
 
-    返回 (task, level, horizon, session_key, nwb_path)；train=public heldin，query=各级
-    heldout（normal 的 calib 不加载，与脚本画像一致）。
+    返回 (task, level, horizon, session_key, nwb_path)；train = public heldin，
+    query = 各级 heldout。
     """
     root = Path(data_root)
     want_tasks = tuple(tasks) if tasks else TASKS
@@ -222,7 +216,7 @@ class LinceDriftAnalysis(DefaultProcessor):
         if self.data_root is None:
             raise ValueError(
                 "LinceDriftAnalysis(source='sweep') requires an explicit `data_root` processor param "
-                "(the challenge `challenge_data` directory); the plugin ships no machine-local default."
+                "(the challenge `challenge_data` directory)."
             )
         rows = discover_sweep_inputs(self.data_root, self.tasks, self.levels)
         return [
@@ -271,9 +265,9 @@ class LinceDriftAnalysis(DefaultProcessor):
             fr = _slot_fr(slot, key)
             metrics = {
                 "cos_raw": cosine(fr, centroid),
-                "cos_centered": cosine(fr - fr.mean(), centroid - centroid.mean()),  # explore_data.py:165
+                "cos_centered": cosine(fr - fr.mean(), centroid - centroid.mean()),
                 "norm_ratio": float(np.linalg.norm(fr)) / float(np.linalg.norm(centroid))
-                if np.linalg.norm(centroid) else float("nan"),  # explore_data.py:166-167 守卫
+                if np.linalg.norm(centroid) else float("nan"),
             }
             _attach_channel_summary(slot, self.result_prefix, fr, centroid, {**metrics, "gap_days": gap_days})
             targets[key] = {"gap_days": _jsonable(gap_days), **{k: _jsonable(v) for k, v in metrics.items()}}

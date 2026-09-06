@@ -1,8 +1,8 @@
 # 临策·运动跨天解码 — WF baseline 端到端最小链路（载入 → 解码推理 → 漂移分析 → LinshuFile 导出）。
 # 钉死 session：MA_CO / easy / MA-CO-20231227-01。
 # query = private/MA_CO/easy/heldout（25 trials，评测侧）；support = 同日 public/MA_CO/easy/heldin（100 trials，校准侧）。
-# 两个 load 步骤各自显式传 input_path，互不污染；query 侧最后载入，context.session 落评测侧目录标签。
-# WF bundle 自带 z-score 统计，链路不加外部标准化步骤。
+# 两个 load 步骤各自显式传 input_path；query 侧最后载入，context.session 落评测侧目录标签。
+# WF bundle 自带 z-score 统计。
 name: lince-e2e-wf-MA-CO-20231227-01
 linxi_plugin:
   - linxi_linceplugin.load_lince_session
@@ -45,7 +45,7 @@ steps:
     params:
       output_path: "__OUTPUT_ROOT__/MA-CO-20231227-01.ls"
       ecephys_key: "query"
-      # 解码评测落位在 auxiliary_channels / notes / channel_summary（task-2 映射 #3 路线②），trials 表为结构性列
+      # 解码评测落位在 auxiliary_channels / notes / channel_summary，trials 表为结构性列
       session_scalar_cols: []
       require_eval_cols: false
       on_lossy: "warn"

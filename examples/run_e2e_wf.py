@@ -1,14 +1,6 @@
-"""临策 e2e WF 示例驱动：经 ``PipelineDefinition.from_file`` + TaskRunner 执行钉死 session 的流水线。
+"""临策 e2e WF 示例驱动：替换 YAML 路径占位符后执行流水线，可选与黄金结果对账。
 
-YAML 中的 ``__DATA_ROOT__`` / ``__CODE_ROOT__`` / ``__OUTPUT_ROOT__`` 占位符由命令行根路径在执行前替换，
-替换文本写入工作目录下的临时配置，仓库内 YAML 保持占位符原样。
-
-导入次序是契约的一部分：``import numpy`` 必须先于任何 ``linxi`` 导入。
-``linxi/__init__.py`` 在包导入时强制 ``OPENBLAS_NUM_THREADS=1``（防分选算法线程竞态），
-而 OpenBLAS 归约次序在库装载时即固定；官方评测与黄金 ``wf_challenge_results.json``
-产生于环境默认线程配置。先导入 numpy 使本驱动与官方 harness 同配置，逐位复现黄金；
-``linxi process`` CLI 入口因先加载 linxi 包而落入单线程配置，数值确定性偏离黄金
-（本 session 实测 |Δr2_mean_raw| ≈ 8.7e-6），故本示例以驱动为可复现入口。
+用法与占位符说明见 examples/README.md。
 """
 
 from __future__ import annotations

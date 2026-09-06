@@ -1,10 +1,4 @@
-"""赛道评分数学：逐 session R²、延迟分与分级聚合，口径与官方 scoring 完全一致。
-
-负 R² 保留在 ``r2_mean_raw``；计入分数时按 ``max(R², 0)`` clip；延迟分
-``clip(1 - latency_per_bin_ms / 20, 0, 1)``；任务分 = 0.25·easy + 0.45·normal +
-0.30·hard，Final = 两任务均值。所有浮点转换次序（float32 入、float64 算 R²）与
-官方评测链一致，黄金对账在此实现上达到逐位相等。
-"""
+"""赛道评分数学：逐 session R²、延迟分与分级聚合。"""
 
 from __future__ import annotations
 

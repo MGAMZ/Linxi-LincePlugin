@@ -1,19 +1,9 @@
-"""赛道 baseline 解码推理算子：预置权重只读加载，adapt + predict + 官方口径 session 评分。
+"""赛道 baseline 解码推理算子：以官方预置权重执行解码推理与 session 评分。
 
-两种数据来源（``source`` 参数）：
-
-* ``context``：消费任务 1 §6 的布局约定 —— ``context.ecephys["query"]`` /
-  ``context.ecephys["support"]``（X→electrophysiology，Y→auxiliary_channels
-  的 cursor_vel_x / cursor_vel_y，trial 表→events，hard 级缺 support 键即 (0, C)
-  空 support 语义）。逐 bin 预测写回 query 记录的
-  auxiliary_channels["cursor_vel_pred_x" / "cursor_vel_pred_y"]，session 结果 JSON
-  合并进 ``context.notes["lince_baseline_decode"]`` 并以 logger.info 输出机器可读行。
-* ``sweep``：按官方评测协议从 ``data_root`` 自动发现并重跑全部（或筛选的）session，
-  官方 loader 与模型类均在运行时经 ``baseline_code_path`` sys.path 导入，插件不复制官方源码。
-
-权重目录默认指向数据根预置权重 ``<data_root 上级>/challenge_code/Participant/{WF,GRU}``，
-只读加载；每个 session 结束后对权重文件做 sha256 复核，任何改动即报错。
-GRU 需要 torch（可选依赖组 ``[gru]``）及其 CUDA 环境；WF 仅 CPU/numpy。
+``source="context"``：消费流水线已载入的 query / support 记录，逐 bin 预测写回
+query 记录的 auxiliary_channels["cursor_vel_pred_x" / "cursor_vel_pred_y"]，
+session 结果并入 ``context.notes["lince_baseline_decode"]``。
+``source="sweep"``：从 ``data_root`` 自动发现并重跑全部（或筛选的）session。
 """
 
 from __future__ import annotations
@@ -100,7 +90,7 @@ def _session_arrays(context: Any, side: str):
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.POSTPROCESS)
 class BaselineDecodeInfer(DefaultProcessor):
-    PROCESSOR_NAME = "BaselineDecodeInfer"  # 注册名 = PROCESSOR_NAME（缺省回退类名，registry.py:32-33）；显式声明以稳定 YAML 契约
+    PROCESSOR_NAME = "BaselineDecodeInfer"  # 显式声明注册名，稳定 YAML 契约
 
     def __init__(
         self,
@@ -139,8 +129,7 @@ class BaselineDecodeInfer(DefaultProcessor):
         if self.data_root is None:
             raise ValueError(
                 "BaselineDecodeInfer requires an explicit `data_root` processor param when `weights_dir` "
-                "is empty (preset weights resolve to `<data_root 上级>/challenge_code/Participant/...`); "
-                "the plugin ships no machine-local default."
+                "is empty (preset weights resolve to `<data_root 上级>/challenge_code/Participant/...`)."
             )
         return decode_engine.default_weights_dir(self.data_root, self.model)
 
@@ -169,9 +158,8 @@ class BaselineDecodeInfer(DefaultProcessor):
             raise ValueError("source='context' requires non-empty task and level params")
         if self.baseline_code_path is None:
             raise ValueError(
-                "BaselineDecodeInfer requires an explicit `baseline_code_path` processor param (the "
-                "challenge `challenge_code` directory containing Platform/ and Participant/); "
-                "the plugin ships no machine-local default."
+                "BaselineDecodeInfer requires an explicit `baseline_code_path` processor param "
+                "(the challenge `challenge_code` directory containing Platform/ and Participant/)."
             )
         weights = self._weights()
         base_manifest = decode_engine.weights_manifest(weights, self.model)
