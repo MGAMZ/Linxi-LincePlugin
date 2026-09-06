@@ -13,19 +13,22 @@ steps:
   - stage: load
     processor_name: "LoadLinceSession"
     params:
-      input_path: "/mnt/f/mgam_datasets/Lince/运动跨天解码/challenge_data/public/MA_CO/easy/heldin/MA-CO-20231227-01/MA-CO-20231227-01.nwb"
+      input_path: "__DATA_ROOT__/public/MA_CO/easy/heldin/MA-CO-20231227-01/MA-CO-20231227-01.nwb"
       recording_key: "support"
+      data_root: "__DATA_ROOT__"
   - stage: load
     processor_name: "LoadLinceSession"
     params:
-      input_path: "/mnt/f/mgam_datasets/Lince/运动跨天解码/challenge_data/private/MA_CO/easy/heldout/MA-CO-20231227-01/MA-CO-20231227-01.nwb"
+      input_path: "__DATA_ROOT__/private/MA_CO/easy/heldout/MA-CO-20231227-01/MA-CO-20231227-01.nwb"
       recording_key: "query"
+      data_root: "__DATA_ROOT__"
   - stage: postprocess
     processor_name: "BaselineDecodeInfer"
     params:
       model: "wf"
       source: "context"
-      baseline_code_path: "/mnt/f/mgam_repos/Lince/运动跨天解码/challenge_code"
+      baseline_code_path: "__CODE_ROOT__"
+      data_root: "__DATA_ROOT__"
       task: "MA_CO"
       level: "easy"
       session_key: "MA-CO-20231227-01"
@@ -40,7 +43,7 @@ steps:
   - stage: export
     processor_name: "LinceWriteLinshuFile"
     params:
-      output_path: "/mnt/f/mgam_repos/Lince/运动跨天解码/output/linshu_e2e/MA-CO-20231227-01.ls"
+      output_path: "__OUTPUT_ROOT__/MA-CO-20231227-01.ls"
       ecephys_key: "query"
       # 解码评测落位在 auxiliary_channels / notes / channel_summary（task-2 映射 #3 路线②），trials 表为结构性列
       session_scalar_cols: []
