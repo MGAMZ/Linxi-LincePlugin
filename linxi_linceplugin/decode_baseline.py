@@ -107,8 +107,8 @@ class BaselineDecodeInfer(DefaultProcessor):
         *,
         model: str = "wf",
         source: str = "context",
-        baseline_code_path: str = decode_engine.DEFAULT_BASELINE_CODE_PATH,
-        data_root: str = decode_engine.DEFAULT_DATA_ROOT,
+        baseline_code_path: str | None = None,
+        data_root: str | None = None,
         weights_dir: str = "",
         task: str = "",
         level: str = "",
@@ -134,7 +134,15 @@ class BaselineDecodeInfer(DefaultProcessor):
         self.summary: dict[str, Any] | None = None
 
     def _weights(self) -> str:
-        return self.weights_dir or decode_engine.default_weights_dir(self.data_root, self.model)
+        if self.weights_dir:
+            return self.weights_dir
+        if self.data_root is None:
+            raise ValueError(
+                "BaselineDecodeInfer requires an explicit `data_root` processor param when `weights_dir` "
+                "is empty (preset weights resolve to `<data_root 上级>/challenge_code/Participant/...`); "
+                "the plugin ships no machine-local default."
+            )
+        return decode_engine.default_weights_dir(self.data_root, self.model)
 
     def _run_sweep(self) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
         out = decode_engine.run_sweep(
@@ -159,6 +167,12 @@ class BaselineDecodeInfer(DefaultProcessor):
     def _run_context(self, context: Any) -> list[dict[str, Any]]:
         if not self.task or not self.level:
             raise ValueError("source='context' requires non-empty task and level params")
+        if self.baseline_code_path is None:
+            raise ValueError(
+                "BaselineDecodeInfer requires an explicit `baseline_code_path` processor param (the "
+                "challenge `challenge_code` directory containing Platform/ and Participant/); "
+                "the plugin ships no machine-local default."
+            )
         weights = self._weights()
         base_manifest = decode_engine.weights_manifest(weights, self.model)
         if not base_manifest:

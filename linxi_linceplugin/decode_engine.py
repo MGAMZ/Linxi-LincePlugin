@@ -34,9 +34,6 @@ from .decode_scoring import (
     score_session,
 )
 
-DEFAULT_BASELINE_CODE_PATH = "/mnt/f/mgam_repos/Lince/运动跨天解码/challenge_code"
-DEFAULT_DATA_ROOT = "/mnt/f/mgam_datasets/Lince/运动跨天解码/challenge_data"
-
 _KIND_DIRS = {"wf": "WF", "gru": "GRU"}
 _WEIGHT_SUFFIX = {"WF": "pkl", "GRU": "pt"}
 
@@ -207,8 +204,8 @@ def _load_pair(data, spec, strict_trial_counts: bool):
 def run_sweep(
     *,
     model: str,
-    baseline_code_path: str = DEFAULT_BASELINE_CODE_PATH,
-    data_root: str = DEFAULT_DATA_ROOT,
+    baseline_code_path: str | None = None,
+    data_root: str | None = None,
     weights_dir: str = "",
     task: str = "",
     level: str = "",
@@ -221,6 +218,16 @@ def run_sweep(
         raise ValueError(f"unknown task {task!r}; expected one of {list(TASKS)}")
     if level and level not in LEVELS:
         raise ValueError(f"unknown level {level!r}; expected one of {list(LEVELS)}")
+    if baseline_code_path is None:
+        raise ValueError(
+            "run_sweep requires an explicit `baseline_code_path` argument (the challenge `challenge_code` "
+            "directory containing Platform/ and Participant/); the plugin ships no machine-local default."
+        )
+    if data_root is None:
+        raise ValueError(
+            "run_sweep requires an explicit `data_root` argument (the challenge `challenge_data` directory); "
+            "the plugin ships no machine-local default."
+        )
     weights = weights_dir or default_weights_dir(data_root, model)
     data = load_official_loader(baseline_code_path)
 

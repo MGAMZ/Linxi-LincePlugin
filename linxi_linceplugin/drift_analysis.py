@@ -32,7 +32,6 @@ from ._drift_core import (
     session_fr,
 )
 
-DEFAULT_DATA_ROOT = "/mnt/f/mgam_datasets/Lince/运动跨天解码/challenge_data"
 NOTES_KEY = "lince_drift_analysis"
 TASKS = ("MA_CO", "MA_RT")
 SUMMARY_FIELDS = (
@@ -155,8 +154,8 @@ class LinceDriftAnalysis(DefaultProcessor):
     """跨天漂移指标算子。
 
     Parameters：``source`` = context（读 ecephys 槽）| sessions（直传清单：task/level/
-    session_key 必填，horizon 可选，x 为 2-D ndarray 或 nwb_path）| sweep（data_root
-    默认镜像赛道 paths.py，tasks/levels 筛选）。context 态：``target_keys`` 默认
+    session_key 必填，horizon 可选，x 为 2-D ndarray 或 nwb_path）| sweep（``data_root``
+    必须显式传入，tasks/levels 筛选）。context 态：``target_keys`` 默认
     ["query"]；质心 ``centroid_key``（键或键列表）与 ``centroid``（显式向量）二选一；
     ``session_key``/``train_session_keys`` 目录名算 gap_days，缺任一侧 NaN+告警；
     ``result_prefix`` 为 channel_summary 列名前缀，默认 drift。
@@ -220,7 +219,12 @@ class LinceDriftAnalysis(DefaultProcessor):
         return inputs
 
     def _inputs_from_sweep(self) -> list[DriftSessionInput]:
-        rows = discover_sweep_inputs(self.data_root or DEFAULT_DATA_ROOT, self.tasks, self.levels)
+        if self.data_root is None:
+            raise ValueError(
+                "LinceDriftAnalysis(source='sweep') requires an explicit `data_root` processor param "
+                "(the challenge `challenge_data` directory); the plugin ships no machine-local default."
+            )
+        rows = discover_sweep_inputs(self.data_root, self.tasks, self.levels)
         return [
             DriftSessionInput(task=t, level=l, horizon=h, session_key=k, x=read_binned_spikes(p))
             for t, l, h, k, p in rows

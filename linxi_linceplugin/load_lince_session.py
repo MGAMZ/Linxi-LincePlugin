@@ -32,8 +32,6 @@ if TYPE_CHECKING:
     import pandas as pd
     from linxi.fabric.linxi_context import LinxiContext
 
-DEFAULT_DATA_ROOT = "/mnt/f/mgam_datasets/Lince/运动跨天解码/challenge_data"
-
 _SPIKE_COUNTS_UNIT = "spike counts"
 _AUXILIARY_SOURCES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("cursor_vel", ("x", "y")),
@@ -159,13 +157,11 @@ class LoadLinceSession(DefaultProcessor):
     Parameters
     ----------
     input_path:
-        session NWB 文件路径。必须显式传入；本算子刻意不消费 ``run_state.input_path``，
-        以免多 load 步骤相互污染。
+        session NWB 文件路径。必须显式传入；本算子刻意不消费 ``run_state.input_path``，以免多 load 步骤相互污染。
     recording_key:
-        写入 ``context.ecephys`` 的键。query = 评测侧（同时填 ``context.recording`` 与顶层
-        ``context.trials``）；support = 校准侧（只写自己的键）。
+        写入 ``context.ecephys`` 的键。query = 评测侧（同时填 ``context.recording`` 与顶层 ``context.trials``）；support = 校准侧（只写自己的键）。
     data_root:
-        数据根，用于派生 session 标识；默认值镜像 ``运动跨天解码/paths.py`` 的 ``DATA_ROOT``。
+        数据根，用于派生 session 标识。必须显式传入；本仓库不内置任何机器本地数据根默认值。
     """
 
     def __init__(
@@ -187,6 +183,12 @@ class LoadLinceSession(DefaultProcessor):
                 "context.run_state.input_path is neither read nor written so that multiple "
                 "load steps in one pipeline stay independent."
             )
+        if self.data_root is None:
+            raise ValueError(
+                "LoadLinceSession requires an explicit `data_root` processor param; the session "
+                "label is derived from the NWB directory relative to it, and the plugin ships "
+                "no machine-local default."
+            )
         arrays = read_lince_nwb(self.input_path)
         rate = estimate_bin_rate(arrays.timestamps)
         recording = sc.NumpyRecording(arrays.neural, sampling_frequency=rate, t_starts=[float(arrays.timestamps[0])])
@@ -203,12 +205,11 @@ class LoadLinceSession(DefaultProcessor):
         if self.recording_key == "query":
             context.recording = recording
             context.trials = intervals
-        context.session = _session_label(Path(self.input_path), self.data_root or DEFAULT_DATA_ROOT)
+        context.session = _session_label(Path(self.input_path), self.data_root)
         return context
 
 
 __all__ = [
-    "DEFAULT_DATA_ROOT",
     "LinceSessionArrays",
     "LoadLinceSession",
     "estimate_bin_rate",
