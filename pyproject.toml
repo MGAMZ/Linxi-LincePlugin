@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "Linxi-LincePlugin"
+name = "linxi-plugin-lince"
 version = "0.1.0"
 description = "临策算法竞赛通用算子插件仓库"
 readme = "README.md"
