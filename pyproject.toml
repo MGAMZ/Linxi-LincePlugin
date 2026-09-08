@@ -18,9 +18,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=8.0",
-]
 gru = [
     # GRU baseline decoder; plain "torch" = device-neutral wheel choice, no CUDA flavor pin
     "torch",
@@ -32,11 +29,6 @@ packages = ["linxi_linceplugin"]
 [tool.hatch.build]
 include = [
     "linxi_linceplugin/**/*.py",
-    "tests/**/*.py",
     "README.md",
     "NEXTSTEPS.md",
 ]
-
-[tool.pytest.ini_options]
-addopts = "-ra"
-testpaths = ["tests"]

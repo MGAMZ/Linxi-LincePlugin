@@ -1,9 +1,6 @@
 """赛道 baseline 解码推理算子：以官方预置权重执行解码推理与 session 评分。
 
-``source="context"``：消费流水线已载入的 query / support 记录，逐 bin 预测写回
-query 记录的 auxiliary_channels["cursor_vel_pred_x" / "cursor_vel_pred_y"]，
-session 结果并入 ``context.notes["lince_baseline_decode"]``。
-``source="sweep"``：从 ``data_root`` 自动发现并重跑全部（或筛选的）session。
+`source="context"`：消费流水线已载入的 query / support 记录，逐 bin 预测写回 query 记录的 auxiliary_channels["cursor_vel_pred_x" / "cursor_vel_pred_y"]，session 评测载荷写入 `context.metrics` 暂存袋（键 `session_id` / `tier` / `span` / `metrics`，由 `ExportEvalMetrics` 统一写出 eval JSON 侧车）。`source="sweep"`：从 `data_root` 自动发现并重跑全部（或筛选的）session。
 """
 
 from __future__ import annotations
@@ -17,6 +14,7 @@ from linxi.logger import logger
 from linxi.processor import DefaultProcessor, PROCESS_STAGES, register_as_linxi_processor
 
 from . import decode_engine
+from .load_lince_session import session_axis, session_behavior, session_counts_matrix
 
 QUERY_KEY = "query"
 SUPPORT_KEY = "support"
@@ -24,41 +22,24 @@ VELOCITY_X = "cursor_vel_x"
 VELOCITY_Y = "cursor_vel_y"
 PREDICTED_X = "cursor_vel_pred_x"
 PREDICTED_Y = "cursor_vel_pred_y"
-NOTES_KEY = "lince_baseline_decode"
-
-
-def _bin_timestamps(record: Any, side: str) -> np.ndarray:
-    signal = record.electrophysiology
-    if signal is None:
-        raise ValueError(f"ecephys[{side!r}] has no electrophysiology signal")
-    n_bins = int(signal.data.shape[0])
-    if signal.timestamps is not None and len(signal.timestamps) == n_bins:
-        return np.asarray(signal.timestamps, dtype=np.float64)
-    for key in (VELOCITY_X, VELOCITY_Y):
-        aux = record.auxiliary_channels.get(key)
-        if aux is not None and aux.timestamps is not None and len(aux.timestamps) == n_bins:
-            return np.asarray(aux.timestamps, dtype=np.float64)
-    if signal.starting_time is not None and signal.rate:
-        return np.asarray(signal.starting_time, dtype=np.float64) + (
-            np.arange(n_bins, dtype=np.float64) / float(signal.rate)
-        )
-    raise ValueError(
-        f"ecephys[{side!r}] carries no per-bin time base (timestamps or starting_time+rate); "
-        "trial masking cannot be reconstructed"
-    )
+EVAL_METRIC_FIELDS = (
+    "n_bins", "r2_x", "r2_y", "r2_mean_raw", "r2_mean",
+    "total_latency_ms", "latency_per_bin_ms", "latency_score", "session_score",
+    "support_trials", "query_trials",
+)
 
 
 def _session_arrays(context: Any, side: str):
     record = context.ecephys[side]
-    x = np.asarray(record.electrophysiology.data, dtype=np.float32)
+    x = np.asarray(session_counts_matrix(context, side), dtype=np.float32)
     if x.ndim != 2:
-        raise ValueError(f"ecephys[{side!r}] electrophysiology must be (T, C), got {x.shape}")
-    timestamps = _bin_timestamps(record, side)
-    aux = record.auxiliary_channels
+        raise ValueError(f"ecephys[{side!r}] counts matrix must be (T, C), got {x.shape}")
+    timestamps = session_axis(context, side)
+    aux = session_behavior(context, side)
     missing = [key for key in (VELOCITY_X, VELOCITY_Y) if key not in aux]
     if missing:
         raise ValueError(
-            f"ecephys[{side!r}].auxiliary_channels missing {missing}; "
+            f"{side!r} 侧行为序列缺失 {missing}; "
             f"available: {sorted(aux)}"
         )
     y = np.column_stack(
@@ -214,43 +195,34 @@ class BaselineDecodeInfer(DefaultProcessor):
             weights_check=weights_check,
         )
 
-        velocity_unit = context.ecephys[QUERY_KEY].auxiliary_channels[VELOCITY_X].unit
+        query_record = context.ecephys[QUERY_KEY]
+        velocity_unit = session_behavior(context, QUERY_KEY)[VELOCITY_X].unit
+        guidance_rate = context.binned_spikes.sampling_frequency
         for key, column in ((PREDICTED_X, prediction[:, 0]), (PREDICTED_Y, prediction[:, 1])):
-            context.ecephys[QUERY_KEY].auxiliary_channels[key] = TimeSeries(
+            query_record.auxiliary_channels[key] = TimeSeries(
                 name=key,
                 data=np.ascontiguousarray(column, dtype=np.float32),
                 timestamps=query_timestamps[query_mask],
+                rate=guidance_rate,
                 unit=velocity_unit,
             )
         return [result]
 
-    def _record_notes(self, context: Any, records: list[dict[str, Any]]) -> None:
-        payload: dict[str, Any] = {"model": self.model, "source": self.source, "sessions": records}
-        if self.summary is not None:
-            payload["aggregate"] = {
-                key: self.summary[key]
-                for key in ("final_score", "task_scores", "level_scores")
-            }
-        merged: dict[str, Any] = {}
-        if context.notes:
-            try:
-                parsed = json.loads(context.notes)
-            except json.JSONDecodeError:
-                parsed = None
-            if isinstance(parsed, dict):
-                merged = parsed
-            else:
-                merged = {"prior_notes": context.notes}
-        merged[NOTES_KEY] = payload
-        context.notes = json.dumps(merged, ensure_ascii=False)
+    def _record_metrics(self, context: Any, records: list[dict[str, Any]]) -> None:
+        if self.source == "context" and len(records) == 1:
+            row = records[0]
+            context.put_metric("session_id", row["session_id"])
+            context.put_metric("tier", row["level"])
+            context.put_metric("span", row["horizon"])
+            context.put_metric("metrics", {key: row[key] for key in EVAL_METRIC_FIELDS})
         for row in records:
-            context_note = {
+            log_row = {
                 key: row[key]
                 for key in ("session_id", "r2_x", "r2_y", "r2_mean_raw", "r2_mean",
                             "session_score", "latency_per_bin_ms")
             }
-            context_note["model"] = self.model
-            logger.info(f"[BaselineDecodeInfer] {json.dumps(context_note, ensure_ascii=False)}")
+            log_row["model"] = self.model
+            logger.info(f"[BaselineDecodeInfer] {json.dumps(log_row, ensure_ascii=False)}")
 
     def _process(self, context: Any) -> Any:
         if self.source == "sweep":
@@ -258,5 +230,5 @@ class BaselineDecodeInfer(DefaultProcessor):
         else:
             records = self._run_context(context)
         self.session_results = records
-        self._record_notes(context, records)
+        self._record_metrics(context, records)
         return context

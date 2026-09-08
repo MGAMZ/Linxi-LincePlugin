@@ -76,10 +76,8 @@ class LinceWriteLinshuFile(DefaultProcessor):
 
     Parameters
     ----------
-    output_path / chunk_frames / write_workers / unit / overwrite / skip_fields /
-    skip_raw_signals :
-        原样透传给组合的上游 ``WriteLinshuFile``；``unit`` 保持上游固定 ``"volts"`` 语义
-        （赛题 binned_spikes 实为计数）。
+    output_path / overwrite / skip_fields / skip_raw_signals :
+        透传上游 `WriteLinshuFile` 的同名参数，语义与上游一致。
     ecephys_key : str
         信号槽键，临策双记录布局默认 ``"query"``。
     session_scalar_cols : list[str] | None
@@ -96,9 +94,6 @@ class LinceWriteLinshuFile(DefaultProcessor):
         self,
         output_path: str | None = None,
         ecephys_key: str = "query",
-        chunk_frames: int = 30000,
-        write_workers: int = 8,
-        unit: str = "volts",
         overwrite: bool = True,
         skip_fields: list[str] | None = None,
         skip_raw_signals: bool = False,
@@ -118,9 +113,6 @@ class LinceWriteLinshuFile(DefaultProcessor):
         self._writer = WriteLinshuFile(
             output_path=output_path,
             ecephys_key=ecephys_key,
-            chunk_frames=chunk_frames,
-            write_workers=write_workers,
-            unit=unit,
             overwrite=overwrite,
             skip_fields=skip_fields,
             skip_raw_signals=skip_raw_signals,

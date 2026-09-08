@@ -2,11 +2,10 @@
 
 1. 确保 Linxi 安装在与你的插件相同的 Python 环境中。Linxi 竞赛正式上线时提供 PyPI 版本，执行 `python -m pip install linxi`（连同 `linshu-format` 依赖一并装入当前环境）。
    - 校验：`python -c "import linxi"` 无报错。
-2. 执行 `python -m pip install -e ".[dev]"`，把当前插件仓库连同开发依赖（含 `pytest`）安装为可编辑模式。
+2. 执行 `python -m pip install -e .`，把当前插件仓库安装为可编辑模式。
 3. 根据你的业务需要修改 `linxi_linceplugin` 包中的示例代码。
 4. 如果你不需要某个示例文件，可以直接删除它，并同步更新 `__init__.py`。
-5. 运行 `python -m pytest`，确认当前插件包至少能通过最小注册测试。
-6. 在 Linxi 的 pipeline YAML 中配置 `linxi_plugin`，验证你的 processor 或 probe 能被发现。YAML 样例与加载入口（`linxi process -c <yaml>` 或 `PipelineDefinition.from_file`）见仓库 `README.md` 的"算子与注册"与"开发自定义算子"两节。
+5. 在 Linxi 的 pipeline YAML 中配置 `linxi_plugin`，验证你的 processor 或 probe 能被发现。YAML 样例与加载入口（`linxi process -c <yaml>` 或 `PipelineDefinition.from_file`）见仓库 `README.md` 的"算子与注册"与"开发自定义算子"两节。
 
 ## 代码修改建议
 

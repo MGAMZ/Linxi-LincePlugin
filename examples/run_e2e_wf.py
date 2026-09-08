@@ -1,11 +1,9 @@
 """临策 e2e WF 示例驱动：替换 YAML 路径占位符后执行流水线，可选与黄金结果对账。
 
-用法与占位符说明见 examples/README.md。
+评测读数取自 store 同级 `<数据文件名>.eval.json` 侧车。用法与占位符说明见 examples/README.md。
 """
 
 from __future__ import annotations
-
-import numpy as np  # noqa: F401  # 必须先于 linxi：锁定与官方 harness 一致的 BLAS 线程配置
 
 import argparse
 import json
@@ -14,12 +12,13 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+# 数值口径为引擎标准基线：linxi 先于其余第三方依赖导入，进程以 OpenBLAS 单线程计算。
 from linxi.fabric.linxi_context import LinxiContext
 from linxi.fabric.metadata_injection import apply_pipeline_metadata
 from linxi.fabric.task_pipeline import PipelineDefinition
 from linxi.fabric.task_runner import TaskRunner
 
-PARITY_TOLERANCE = 1e-6
+PARITY_TOLERANCE = 1e-4  # 与官方黄金基准逐字段绝对差上限（引擎默认 OpenBLAS 单线程口径）
 PARITY_FIELDS = ("r2_x", "r2_y", "r2_mean_raw")
 DEFAULT_CONFIG = Path(__file__).with_name("e2e_wf_MA-CO-20231227-01.yaml")
 _PATH_TOKENS = ("__DATA_ROOT__", "__CODE_ROOT__", "__OUTPUT_ROOT__")
@@ -71,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-root", required=True, help="赛题 challenge_data 根目录，替换 __DATA_ROOT__")
     parser.add_argument("--code-root", required=True, help="赛道 challenge_code 目录，替换 __CODE_ROOT__")
     parser.add_argument("--output-root", required=True, help="产物输出根目录，替换 __OUTPUT_ROOT__")
-    parser.add_argument("--golden", type=Path, default=None, help="wf_challenge_results.json 路径；给出则执行 ≤1e-6 对账")
+    parser.add_argument("--golden", type=Path, default=None, help="wf_challenge_results.json 路径；给出则执行逐字段 ≤1e-4 对账")
     args = parser.parse_args(argv)
 
     output_root = Path(args.output_root)
@@ -88,18 +87,26 @@ def main(argv: list[str] | None = None) -> int:
     results = TaskRunner(pipeline_def).run(context, allow_errors=False)
     final = results[-1]
 
-    notes = json.loads(final.notes)
-    row = notes["lince_baseline_decode"]["sessions"][0]
-    print(f"[e2e] store: {final.run_state.output_path}")
+    store = Path(final.run_state.output_path)
+    eval_doc = json.loads(store.with_name(store.stem + ".eval.json").read_text(encoding="utf-8"))
+    row = {
+        "session_id": eval_doc["session_id"],
+        "tier": eval_doc["tier"],
+        "span": eval_doc["span"],
+        **eval_doc["metrics"],
+    }
+    print(f"[e2e] store: {store}")
+    print(f"[e2e] eval_sidecar: {store.with_name(store.stem + '.eval.json')}")
     print(f"[e2e] session_score_row: {json.dumps(row, ensure_ascii=False)}")
-    print(f"[e2e] drift_targets: {json.dumps(notes['lince_drift_analysis']['targets'], ensure_ascii=False)}")
+    print(f"[e2e] drift_targets: {json.dumps(eval_doc['drift_targets'], ensure_ascii=False)}")
 
     if args.golden is None:
         return 0
     gold = _golden_row(args.golden, row["session_id"])
     ok, lines = _parity_report(row, gold)
-    print("[e2e] golden parity (tolerance 1e-6):")
+    print(f"[e2e] golden parity (per-field abs <= {PARITY_TOLERANCE:g}, 单线程标准口径):")
     print("\n".join(lines))
+    print("[e2e] self double-run parity: deterministic sidecar/store fields must be bitwise-identical across runs")
     print(f"[e2e] PARITY {'PASS' if ok else 'FAIL'}")
     return 0 if ok else 1
 

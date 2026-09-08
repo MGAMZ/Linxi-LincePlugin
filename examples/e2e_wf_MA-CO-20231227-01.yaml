@@ -9,6 +9,7 @@ linxi_plugin:
   - linxi_linceplugin.decode_baseline
   - linxi_linceplugin.drift_analysis
   - linxi_linceplugin.export_wiring
+  - linxi_linceplugin.eval_export
 steps:
   - stage: load
     processor_name: "LoadLinceSession"
@@ -45,8 +46,11 @@ steps:
     params:
       output_path: "__OUTPUT_ROOT__/MA-CO-20231227-01.ls"
       ecephys_key: "query"
-      # 解码评测落位在 auxiliary_channels / notes / channel_summary，trials 表为结构性列
+      # 解码/漂移评测载荷经 context.metrics 暂存袋由 ExportEvalMetrics 写入同级侧车；trials 表为结构性列
       session_scalar_cols: []
       require_eval_cols: false
       on_lossy: "warn"
       overwrite: true
+  - stage: export
+    processor_name: "ExportEvalMetrics"
+    params: {}

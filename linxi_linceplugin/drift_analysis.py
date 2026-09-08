@@ -1,7 +1,6 @@
 """跨天漂移指标算子（ANALYZE 阶段）：计算逐 session 漂移指标与聚合结果。
 
-``source`` 三态：``context`` 读流水线已载入的 ``ecephys`` 槽， ``sessions`` 直传会话清单，``sweep`` 扫描 ``data_root``。
-结果写入 ``ecephys[k].channel_summary``与 ``context.notes["lince_drift_analysis"]``。
+`source` 三态：`context` 读流水线已载入的 `ecephys` 槽，`sessions` 直传会话清单，`sweep` 扫描 `data_root`。context 态：逐通道真值列写入 `ecephys[k].channel_summary`，会话级目标指标写入 `context.metrics` 的 `drift_targets` 键（由 `ExportEvalMetrics` 统一写出 eval JSON 侧车）；批量态结果留存于算子实例与日志。
 """
 
 from __future__ import annotations
@@ -25,8 +24,9 @@ from ._drift_core import (
     parse_session_date,
     session_fr,
 )
+from .load_lince_session import session_counts_matrix
 
-NOTES_KEY = "lince_drift_analysis"
+TARGETS_KEY = "drift_targets"
 TASKS = ("MA_CO", "MA_RT")
 SUMMARY_FIELDS = (
     "cos_raw_mean_hard", "one_minus_cos_raw_mean_hard", "cos_centered_mean_hard",
@@ -91,21 +91,6 @@ def discover_sweep_inputs(
     return rows
 
 
-def _merge_notes(context: Any, payload: dict[str, Any]) -> None:
-    merged: dict[str, Any] = {}
-    if context.notes:
-        try:
-            parsed = json.loads(context.notes)
-        except json.JSONDecodeError:
-            parsed = None
-        if isinstance(parsed, dict):
-            merged = parsed
-        else:
-            merged = {"prior_notes": context.notes}
-    merged[NOTES_KEY] = payload
-    context.notes = json.dumps(merged, ensure_ascii=False)
-
-
 def _jsonable(v: float | int) -> float | None:
     return None if isinstance(v, float) and not np.isfinite(v) else float(v)
 
@@ -118,28 +103,26 @@ def _session_row(m: Any) -> dict[str, Any]:
     }
 
 
-def _attach_channel_summary(slot: Any, prefix: str, fr: np.ndarray, centroid: np.ndarray, metrics: dict[str, float]) -> None:
-    n = fr.shape[0]
+def _attach_channel_summary(slot: Any, prefix: str, fr: np.ndarray, centroid: np.ndarray) -> None:
     cols = {
         f"{prefix}_fr": fr,
         f"{prefix}_centroid_fr": centroid,
-        **{f"{prefix}_{k}": np.full(n, v, dtype=np.float64) for k, v in metrics.items()},
     }
-    new = xr.Dataset({k: (("channel_id",), v) for k, v in cols.items()}, coords={"channel_id": np.arange(n)})
+    new = xr.Dataset({k: (("channel_id",), v) for k, v in cols.items()}, coords={"channel_id": np.arange(fr.shape[0])})
     if slot.channel_summary is None:
         slot.channel_summary = new
     else:
         slot.channel_summary = slot.channel_summary.assign({k: new[k] for k in new.data_vars})
 
 
-def _slot_fr(slot: Any, key: str) -> np.ndarray:
-    if slot.electrophysiology is None:
-        raise ValueError(f"ecephys[{key!r}] has no electrophysiology signal for drift analysis")
-    x = np.asarray(slot.electrophysiology.data)
+def _slot_fr(context: Any, key: str) -> np.ndarray:
+    """会话发放率向量的输入矩阵：query 侧取根容器 `binned_spikes` 的计数矩阵，support 侧取记录的 `electrophysiology` 信号。"""
+    slot = context.ecephys[key]
+    x = np.asarray(session_counts_matrix(context, key))
     if x.ndim == 2 and x.shape[1] != slot.channel_count and x.shape[0] == slot.channel_count:
         x = x.T
     if x.ndim != 2:
-        raise ValueError(f"ecephys[{key!r}] electrophysiology must be (T, C), got {x.shape}")
+        raise ValueError(f"ecephys[{key!r}] counts matrix must be (T, C), got {x.shape}")
     return session_fr(x)
 
 
@@ -228,12 +211,8 @@ class LinceDriftAnalysis(DefaultProcessor):
         result = compute_drift_metrics(inputs)
         self.result = result
         summary = {f: _jsonable(getattr(result, f)) for f in SUMMARY_FIELDS}
-        _merge_notes(context, {
-            "mode": self.source,
-            "summary": summary,
-            "n_sessions": len(result.sessions),
-            "sessions": [_session_row(m) for m in result.sessions],
-        })
+        for m in result.sessions:
+            logger.info(f"[drift] {self.source} session: " + json.dumps(_session_row(m), ensure_ascii=False))
         logger.info(f"[drift] {self.source} summary: " + json.dumps(summary, ensure_ascii=False))
 
     def _context_centroid(self, context: Any) -> np.ndarray:
@@ -245,7 +224,7 @@ class LinceDriftAnalysis(DefaultProcessor):
         missing = [k for k in keys if context.ecephys.get(k) is None]
         if missing:
             raise ValueError(f"centroid_key not found in context.ecephys: {missing} (have {sorted(context.ecephys)})")
-        return centroid_from_frs([_slot_fr(context.ecephys[k], k) for k in keys])
+        return centroid_from_frs([_slot_fr(context, k) for k in keys])
 
     def _context_gap_days(self) -> float:
         if not self.session_key or not self.train_session_keys:
@@ -262,14 +241,14 @@ class LinceDriftAnalysis(DefaultProcessor):
             slot = context.ecephys.get(key)
             if slot is None:
                 raise ValueError(f"target_key {key!r} not found in context.ecephys (have {sorted(context.ecephys)})")
-            fr = _slot_fr(slot, key)
+            fr = _slot_fr(context, key)
             metrics = {
                 "cos_raw": cosine(fr, centroid),
                 "cos_centered": cosine(fr - fr.mean(), centroid - centroid.mean()),
                 "norm_ratio": float(np.linalg.norm(fr)) / float(np.linalg.norm(centroid))
                 if np.linalg.norm(centroid) else float("nan"),
             }
-            _attach_channel_summary(slot, self.result_prefix, fr, centroid, {**metrics, "gap_days": gap_days})
+            _attach_channel_summary(slot, self.result_prefix, fr, centroid)
             targets[key] = {"gap_days": _jsonable(gap_days), **{k: _jsonable(v) for k, v in metrics.items()}}
-        _merge_notes(context, {"mode": "context", "targets": targets, "centroid_source": self.centroid_key or "centroid"})
+        context.put_metric(TARGETS_KEY, targets)
         logger.info("[drift] context summary: " + json.dumps(targets, ensure_ascii=False))

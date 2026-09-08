@@ -1,20 +1,21 @@
 """赛题 NWB → 临析内部表示的载入算子（LOAD 阶段）。
 
-读取 session NWB 的发放矩阵、光标信号与 trial 表，写入 ``context.ecephys[recording_key]``；
-query 侧同步写顶层 ``context.recording`` 与 ``context.trials``。
-session 标识由 NWB 所在目录相对 ``data_root`` 的路径派生。
+读取 session NWB 的发放矩阵、光标信号与 trial 表。query 侧（评测主记录）的计数矩阵与行为序列写入 LinshuFile 根容器 `binned_spikes` / `behavior_recording`，记录写入 `context.ecephys[recording_key]` 并携带试次表、`eval_mask` 辅助通道与会话起始时刻、时间基准声明，同步写顶层 `context.recording` 与 `context.trials`；support 侧（校准记录）整体写入 `context.ecephys[recording_key]`。session 标识由 NWB 所在目录相对 `data_root` 的路径派生。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import spikeinterface.core as sc
+import xarray as xr
 from linxi.processor import PROCESS_STAGES, DefaultProcessor, register_as_linxi_processor
-from linshu_format.core import EcephysRecording, TimeIntervals, TimeSeries
+from linshu_format.core import BinnedSpikes, EcephysRecording, TimeIntervals, TimeSeries
+from linshu_format.core.time_axis import authoritative_axis, make_time_axis
 from pynwb import NWBHDF5IO
 
 if TYPE_CHECKING:
@@ -22,10 +23,21 @@ if TYPE_CHECKING:
     from linxi.fabric.linxi_context import LinxiContext
 
 _SPIKE_COUNTS_UNIT = "spike counts"
-_AUXILIARY_SOURCES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("cursor_vel", ("x", "y")),
-    ("cursor_pos", ("x", "y")),
-    ("eval_mask", ()),
+_SESSION_TIME_REFERENCE = "session_start_epoch"
+# (acquisition 名, x/y 分量后缀, 是否行为序列)；键名 = 名_后缀（无后缀时即名）。
+_AUXILIARY_SOURCES: tuple[tuple[str, tuple[str, ...], bool], ...] = (
+    ("cursor_vel", ("x", "y"), True),
+    ("cursor_pos", ("x", "y"), True),
+    ("eval_mask", (), False),
+)
+
+
+def _source_keys(name: str, axes: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(f"{name}_{axis}" for axis in axes) if axes else (name,)
+
+
+_BEHAVIOR_KEYS = frozenset(
+    key for name, axes, is_behavior in _AUXILIARY_SOURCES if is_behavior for key in _source_keys(name, axes)
 )
 
 
@@ -37,6 +49,9 @@ class LinceSessionArrays:
     timestamps: np.ndarray
     trials: "pd.DataFrame"
     aux: dict[str, tuple[np.ndarray, np.ndarray, str | None]]
+    session_start_time: datetime
+    source_identifier: str
+    counts_provenance: str | None
 
 
 def _require_acquisition(nwbfile: object, name: str, path: Path) -> object:
@@ -70,16 +85,21 @@ def read_lince_nwb(nwb_path: str | Path) -> LinceSessionArrays:
             neural = np.ascontiguousarray(neural.T)
         if neural.ndim != 2:
             raise ValueError(f"NWB binned_spikes must be 2-D (T, C), got shape {neural.shape}: {path}")
+        raw_provenance = getattr(spikes, "description", None)
+        counts_provenance = None if raw_provenance is None else str(raw_provenance)
+        session_start_time = nwbfile.session_start_time  # pyright: ignore[reportAttributeAccessIssue]
+        if not isinstance(session_start_time, datetime):
+            raise ValueError(f"NWB session_start_time must be a real datetime: {path} (got {session_start_time!r})")
+        source_identifier = str(nwbfile.identifier)  # pyright: ignore[reportAttributeAccessIssue]
 
         aux: dict[str, tuple[np.ndarray, np.ndarray, str | None]] = {}
-        for name, axes in _AUXILIARY_SOURCES:
+        for name, axes, _is_behavior in _AUXILIARY_SOURCES:
             container = _require_acquisition(nwbfile, name, path)
             if axes:
-                for axis in axes:
+                for axis, key in zip(axes, _source_keys(name, axes)):
                     child = container.time_series.get(axis)  # pyright: ignore[reportAttributeAccessIssue]
                     if child is None:
                         raise ValueError(f"NWB missing acquisition/{name}/{axis}: {path}")
-                    key = f"{name}_{axis}"
                     aux[key] = _read_time_series(child, f"acquisition/{name}/{axis}", path)
             else:
                 aux[name] = _read_time_series(container, f"acquisition/{name}", path)
@@ -104,7 +124,15 @@ def read_lince_nwb(nwb_path: str | Path) -> LinceSessionArrays:
     for key in ("cursor_vel_x", "cursor_vel_y"):
         if not np.isfinite(aux[key][0]).all():
             raise ValueError(f"NWB contains NaN or Inf in {key}: {path}")
-    return LinceSessionArrays(neural=neural, timestamps=timestamps, trials=trials, aux=aux)
+    return LinceSessionArrays(
+        neural=neural,
+        timestamps=timestamps,
+        trials=trials,
+        aux=aux,
+        session_start_time=session_start_time,
+        source_identifier=source_identifier,
+        counts_provenance=counts_provenance,
+    )
 
 
 def estimate_bin_rate(timestamps: np.ndarray) -> float:
@@ -131,6 +159,60 @@ def project_bins_to_trials(timestamps: np.ndarray, trials: "pd.DataFrame") -> np
     return trial_ids
 
 
+def session_counts_matrix(context: Any, side: str) -> xr.DataArray:
+    """计数矩阵 (time, channel)：query 侧取根容器 `binned_spikes`，support 侧取记录的 `electrophysiology` 信号。"""
+    if side == "query":
+        spikes = context.binned_spikes
+        if spikes is None:
+            raise ValueError("context.binned_spikes 为 None：query 侧计数矩阵应由 LoadLinceSession(recording_key='query') 产出")
+        return spikes.counts
+    signal = context.ecephys[side].electrophysiology
+    if signal is None:
+        raise ValueError(f"ecephys[{side!r}] has no electrophysiology signal")
+    return signal.data
+
+
+def session_axis(context: Any, side: str) -> np.ndarray:
+    """计数行时间的权威轴（秒）：query 侧为 `BinnedSpikes.time`，support 侧为记录主信号的时间轴。"""
+    matrix_source: Any = context.binned_spikes if side == "query" else context.ecephys[side].electrophysiology
+    if matrix_source is None:
+        raise ValueError(f"{side!r} 侧计数时间轴不可得：对应容器尚未产出")
+    axis, _provenance = authoritative_axis(matrix_source)
+    return axis
+
+
+def session_behavior(context: Any, side: str) -> dict[str, TimeSeries]:
+    """行为序列（光标速度与位置）：query 侧取根容器 `behavior_recording`，support 侧取记录的 `auxiliary_channels`。"""
+    if side == "query":
+        behavior = context.behavior_recording
+        if not behavior:
+            raise ValueError("context.behavior_recording 为空：query 侧行为序列应由 LoadLinceSession(recording_key='query') 产出")
+        return behavior
+    return context.ecephys[side].auxiliary_channels
+
+
+def _binned_spikes_container(arrays: LinceSessionArrays, channel_ids: np.ndarray, rate: float) -> BinnedSpikes:
+    """构建 query 侧计数矩阵的根容器 `binned_spikes`。
+
+    行时间为源数据的真实时间戳，试次间隙体现为相邻 bin 间距增大；名义分箱宽度由 `bin_sec` 承载，`source_pipeline` 与 `source_recording_ref` 记录产出管线与源记录标识。
+    """
+    spec = make_time_axis(arrays.timestamps, n_rows=int(arrays.neural.shape[0]), nominal_rate=rate)
+    time = spec.timestamps if spec.timestamps is not None else np.asarray(arrays.timestamps, dtype=np.float64)
+    bin_sec = 1.0 / rate
+    return BinnedSpikes(
+        counts=xr.DataArray(arrays.neural, dims=("time", "channel"), coords={"channel": channel_ids}),
+        time=time,
+        bin_sec=bin_sec,
+        bin_samples=int(round(bin_sec * rate)),
+        sampling_frequency=rate,
+        time_reference="bin_center",
+        dtype=str(arrays.neural.dtype),
+        source_pipeline=arrays.counts_provenance,
+        source_sorter=None,
+        source_recording_ref=arrays.source_identifier,
+    )
+
+
 def _session_label(path: Path, data_root: str) -> str:
     directory = path.resolve().parent
     try:
@@ -148,7 +230,7 @@ class LoadLinceSession(DefaultProcessor):
     input_path:
         session NWB 文件路径。必须显式传入；本算子刻意不消费 ``run_state.input_path``，以免多 load 步骤相互污染。
     recording_key:
-        写入 ``context.ecephys`` 的键。query = 评测侧（同时填 ``context.recording`` 与顶层 ``context.trials``）；support = 校准侧（只写自己的键）。
+        写入 `context.ecephys` 的键。query = 评测侧（计数矩阵与行为序列写入根容器 `binned_spikes` / `behavior_recording`，同时填 `context.recording` 与顶层 `context.trials`）；support = 校准侧（整体只写入该键）。
     data_root:
         数据根，用于派生 session 标识。必须显式传入；本仓库不内置任何机器本地数据根默认值。
     """
@@ -178,18 +260,35 @@ class LoadLinceSession(DefaultProcessor):
             )
         arrays = read_lince_nwb(self.input_path)
         rate = estimate_bin_rate(arrays.timestamps)
-        recording = sc.NumpyRecording(arrays.neural, sampling_frequency=rate, t_starts=[float(arrays.timestamps[0])])
+        recording = sc.NumpyRecording(arrays.neural, sampling_frequency=rate)
+        recording.set_times(arrays.timestamps, segment_index=0, with_warning=False)
         intervals = TimeIntervals(name="trials", table=arrays.trials)
+        query_side = self.recording_key == "query"
 
-        ecephys = EcephysRecording.from_spikeinterface_recording(recording, name="binned_spikes", unit=_SPIKE_COUNTS_UNIT)
-        ecephys.electrophysiology.timestamps = arrays.timestamps
-        ecephys.electrophysiology.starting_time = None
+        if query_side:
+            ecephys = EcephysRecording(
+                sampling_frequency=rate,
+                channel_count=int(arrays.neural.shape[1]),
+                session_start_time=arrays.session_start_time,
+                time_reference=_SESSION_TIME_REFERENCE,
+            )
+            behavior: dict[str, TimeSeries] = {}
+        else:
+            ecephys = EcephysRecording.from_spikeinterface_recording(recording, name="binned_spikes", unit=_SPIKE_COUNTS_UNIT)
+            ecephys.session_start_time = arrays.session_start_time
+            ecephys.time_reference = _SESSION_TIME_REFERENCE
         ecephys.events = intervals
         for key, (data, child_ts, unit) in arrays.aux.items():
-            ecephys.auxiliary_channels[key] = TimeSeries(name=key, data=data, timestamps=child_ts, unit=unit)
+            series = TimeSeries(name=key, data=data, timestamps=child_ts, rate=rate, unit=unit)
+            if query_side and key in _BEHAVIOR_KEYS:
+                behavior[key] = series
+            else:
+                ecephys.auxiliary_channels[key] = series
 
         context.ecephys[self.recording_key] = ecephys
-        if self.recording_key == "query":
+        if query_side:
+            context.binned_spikes = _binned_spikes_container(arrays, np.asarray(recording.get_channel_ids()), rate)
+            context.behavior_recording = behavior
             context.recording = recording
             context.trials = intervals
         context.session = _session_label(Path(self.input_path), self.data_root)
@@ -202,4 +301,7 @@ __all__ = [
     "estimate_bin_rate",
     "project_bins_to_trials",
     "read_lince_nwb",
+    "session_axis",
+    "session_behavior",
+    "session_counts_matrix",
 ]
