@@ -1,6 +1,6 @@
 # Linxi-LincePlugin
 
-临策算法竞赛通用算子插件仓库。面向"运动跨天解码"赛道提供五个 Linxi 算子：赛题 NWB 载入、赛道 baseline 解码推理、跨天漂移指标、LinshuFile 导出、评测侧车导出。
+临策算法竞赛通用算子插件仓库。面向"运动跨天解码"赛道提供五个 Linxi 算子：赛题 NWB 载入、赛道 baseline 解码推理、跨天漂移指标、LinshuFile 导出、评测侧车导出；面向"记忆状态跨个体跨天解码"赛道提供 DPA session 的 units-based NWB 载入算子。
 一条 pipeline YAML 即可对原始数据进行处理并输出 `.ls` 数据文件与同级评测侧车 JSON。
 
 ## 安装前提
@@ -42,6 +42,7 @@ python -m pip install -e .
 ```yaml
 linxi_plugin:
   - linxi_linceplugin.load_lince_session
+  - linxi_linceplugin.load_dpa_session
   - linxi_linceplugin.decode_baseline
   - linxi_linceplugin.drift_analysis
   - linxi_linceplugin.export_wiring
@@ -51,6 +52,7 @@ linxi_plugin:
 | stage | processor_name | 导入模块 | 描述 |
 |---|---|---|---|
 | load | `LoadLinceSession` | `linxi_linceplugin.load_lince_session` | 单个赛题 session 的 NWB 投影进临析内部表示 |
+| load | `LoadLinceDpaSession` | `linxi_linceplugin.load_dpa_session` | 单个 DPA session 的 units-based NWB 投影进临析内部表示 |
 | postprocess | `BaselineDecodeInfer` | `linxi_linceplugin.decode_baseline` | 预置权重 WF/GRU baseline 解码推理与官方口径评分 |
 | analyze | `LinceDriftAnalysis` | `linxi_linceplugin.drift_analysis` | 跨天漂移指标（cos_raw、cos_centered、norm_ratio、gap-days 相关） |
 | export | `LinceWriteLinshuFile` | `linxi_linceplugin.export_wiring` | 表示层接线上游 `WriteLinshuFile` 写出 `.ls` |
@@ -66,6 +68,18 @@ linxi_plugin:
 | `recording_key` | "query" | 区分数据为评测集（query）还是校准集（support）。 |
 | `data_root` | 必填 | 数据根目录路径 |
 | `name` | `None` | 算子实例名 |
+
+### LoadLinceDpaSession
+
+DPA 赛题 NWB 只有 `units`、`intervals/trials` 与 `processing/ecephys/Firing_rate_1000ms` 三个实体位置，无 acquisition/electrodes，上游 `LoadNWB` 与运动侧载入字段假设均不适用，本算子按该 schema 自定义只读载入并做全契约校验（nwb 2.9.0、文件名 subject/date/role 与文件内标识交叉、trial 角色↔列矩阵、FR 形状与索引列语义、spike 计数三方一致）。
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `input_path` | `None` | DPA session NWB 文件路径（必填传入） |
+| `recording_key` | "query" | query = 链上主记录；support = 校准记录（只写 `context.ecephys[recording_key]`） |
+| `name` | `None` | 算子实例名 |
+
+query 侧落位：FR 速率矩阵（已剥除源中混入数据区的 trial/bin 索引列）写根容器 `binned_spikes`（`time` 置空，行→时间语义由 `time_reference="delay_concat_bins"` 声明；units 表整体挂 counts 的 `channel` 多级坐标）；units 表与逐单元 spike 序列写根容器 `neurons`（`spike_samples` 为延迟拼接轴秒值，1 Hz 下 sample 即秒）；试次表写顶层 `context.trials` 与 `context.recording`。两侧的 `auxiliary_channels` 均物化 `trial_index`/`bin_index` 两条逐行索引序列。session 标识取 NWB 文件名主干。
 
 ### BaselineDecodeInfer
 
