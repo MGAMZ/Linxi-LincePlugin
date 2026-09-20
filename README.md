@@ -1,6 +1,6 @@
 # Linxi-LincePlugin
 
-临策算法竞赛通用算子插件仓库。面向"运动跨天解码"赛道提供五个 Linxi 算子：赛题 NWB 载入、赛道 baseline 解码推理、跨天漂移指标、LinshuFile 导出、评测侧车导出；面向"记忆状态跨个体跨天解码"赛道提供 DPA session 的 units-based NWB 载入算子。
+临策算法竞赛通用算子插件仓库。面向"运动跨天解码"赛道提供五个 Linxi 算子：赛题 NWB 载入、赛道 baseline 解码推理、跨天漂移指标、LinshuFile 导出、评测侧车导出；面向"记忆状态跨个体跨天解码"赛道提供 DPA session 的 units-based NWB 载入算子与 baseline 分类解码推理算子。
 一条 pipeline YAML 即可对原始数据进行处理并输出 `.ls` 数据文件与同级评测侧车 JSON。
 
 ## 安装前提
@@ -44,6 +44,7 @@ linxi_plugin:
   - linxi_linceplugin.load_lince_session
   - linxi_linceplugin.load_dpa_session
   - linxi_linceplugin.decode_baseline
+  - linxi_linceplugin.dpa_baseline_infer
   - linxi_linceplugin.drift_analysis
   - linxi_linceplugin.export_wiring
   - linxi_linceplugin.eval_export
@@ -54,6 +55,7 @@ linxi_plugin:
 | load | `LoadLinceSession` | `linxi_linceplugin.load_lince_session` | 单个赛题 session 的 NWB 投影进临析内部表示 |
 | load | `LoadLinceDpaSession` | `linxi_linceplugin.load_dpa_session` | 单个 DPA session 的 units-based NWB 投影进临析内部表示 |
 | postprocess | `BaselineDecodeInfer` | `linxi_linceplugin.decode_baseline` | 预置权重 WF/GRU baseline 解码推理与官方口径评分 |
+| postprocess | `DpaBaselineInfer` | `linxi_linceplugin.dpa_baseline_infer` | DPA 赛道 baseline 分类解码（赛道运行时指针管线，评测载荷入暂存袋经侧车袋透传） |
 | analyze | `LinceDriftAnalysis` | `linxi_linceplugin.drift_analysis` | 跨天漂移指标（cos_raw、cos_centered、norm_ratio、gap-days 相关） |
 | export | `LinceWriteLinshuFile` | `linxi_linceplugin.export_wiring` | 表示层接线上游 `WriteLinshuFile` 写出 `.ls` |
 | export | `ExportEvalMetrics` | `linxi_linceplugin.eval_export` | 将 `context.metrics` 暂存袋写出为 `.ls` 同级 `<数据文件名>.eval.json` |
@@ -98,6 +100,17 @@ query 侧落位：FR 速率矩阵（已剥除源中混入数据区的 trial/bin 
 | `horizon` | `""` | normal / hard 的时程片 |
 | `session_key` | `""` | session 目录名 |
 | `strict_trial_counts` | `true` | 是否按赛题规定校验 trial 数 |
+| `name` | `None` | 算子实例名 |
+
+### DpaBaselineInfer
+
+对 DPA 评测文件执行赛道 baseline（恒等 region 池化 linear SVC，6 c2 train 拼接训练、五折 CV 选 C、全训练集重训）分类解码。特征构造、超参网格与评分公式全部经 `track_root` 运行时指针装载的赛道模块执行，插件复刻零数值路径；推理前后对赛道数值路径源码做 sha256 清单守卫。逐 trial 预测 `mem_pred_lbl` / `corr_pred_lbl` 挂入 query 侧试次表；评测载荷写 `context.metrics` 暂存袋标准键 `metrics`（`split`、`subject`、`session_date`、`mem_acc`、`corr_acc`、`session_score`、`n_trials`、`method`），由 `ExportEvalMetrics` 袋透传写侧车。无标签评测角色（`eval` / `eval-2`）照常产出预测与提交契约件，`metrics` 三比值落 null。
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `track_root` | 必填 | "记忆状态跨个体跨天解码"赛道仓库根目录（含 `lince_memory/`、`scripts/`、`paths.py`） |
+| `eval_path` | 必填 | 评测 NWB 路径，命名主干须与上游 `LoadLinceDpaSession` 载入的 session 一致 |
+| `method` | "baseline" | 方法配置名，当前可选 `"baseline"`；未知名 Fast Fail |
 | `name` | `None` | 算子实例名 |
 
 ### LinceDriftAnalysis
@@ -148,7 +161,7 @@ python examples/run_e2e_wf.py \
 
 导出段末尾的 `ExportEvalMetrics` 把 `context.metrics` 暂存袋序列化为与 `.ls` 数据文件同目录、同命名根的 `<数据文件名>.eval.json`（如 `MA-CO-20231227-01.ls` → `MA-CO-20231227-01.eval.json`）。本算子须在写出 `.ls` 的导出算子之后同段执行。
 
-顶层键固定为 `session_id`、`tier`、`span`、`metrics`、`drift_targets`，缺失键落 null；`metrics` 逐项为 `n_bins`、`r2_x`、`r2_y`、`r2_mean_raw`、`r2_mean`、`total_latency_ms`、`latency_per_bin_ms`、`latency_score`、`session_score`、`support_trials`、`query_trials`；`drift_targets` 为跨天漂移分析的目标会话清单。NaN 与 ±Inf 在序列化前统一转换为 null 并打印一条转换清单日志；非 JSON 原生对象即时抛 `TypeError`，不静默丢键。
+顶层键固定为 `session_id`、`tier`、`span`、`metrics`、`drift_targets`，缺失键落 null；`metrics` 逐项由当链解码算子填充——运动链为 `n_bins`、`r2_x`、`r2_y`、`r2_mean_raw`、`r2_mean`、`total_latency_ms`、`latency_per_bin_ms`、`latency_score`、`session_score`、`support_trials`、`query_trials`，DPA 链为 `split`、`subject`、`session_date`、`mem_acc`、`corr_acc`、`session_score`、`n_trials`、`method`；`drift_targets` 为跨天漂移分析的目标会话清单。schema 之外的袋键一并写出。NaN 与 ±Inf 在序列化前统一转换为 null 并打印一条转换清单日志；非 JSON 原生对象即时抛 `TypeError`，不静默丢键。
 
 驱动脚本从该侧车读取评测行。给出 `--golden` 时逐字段与官方黄金基准比较并打印绝对差，每字段判定为绝对差 ≤1e-4，session_score 另以黄金延迟重合成复核，末尾打印 `PARITY PASS/FAIL`；同一配置重复运行时，侧车与 store 的确定性字段完全一致。
 
