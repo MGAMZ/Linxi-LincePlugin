@@ -16,8 +16,13 @@ from linxi.processor import DefaultProcessor, PROCESS_STAGES, register_as_linxi_
 from pynwb import NWBHDF5IO
 
 from ._drift_core import (
+    AGG_LEVEL,
+    DEFAULT_DATE_PATTERN,
     DriftAnalysisResult,
     DriftSessionInput,
+    DriftVocabulary,
+    HOLDOUT_LEVELS,
+    TRAIN_LEVEL,
     centroid_from_frs,
     compute_drift_metrics,
     cosine,
@@ -135,7 +140,10 @@ class LinceDriftAnalysis(DefaultProcessor):
     必须显式传入，tasks/levels 筛选）。context 态：``target_keys`` 默认
     ["query"]；质心 ``centroid_key``（键或键列表）与 ``centroid``（显式向量）二选一；
     ``session_key``/``train_session_keys`` 目录名算 gap_days，缺任一侧 NaN+告警；
-    ``result_prefix`` 为 channel_summary 列名前缀，默认 drift。
+    ``result_prefix`` 为 channel_summary 列名前缀，默认 drift。分级词表参数
+    ``date_pattern``（会话目录名日期正则，首个捕获组为 8 位日期）、``train_level`` /
+    ``holdout_levels`` / ``agg_level``（质心层 / gap×cos 取样层 / 聚合层名）默认值均为运动赛道口径；
+    ``tasks`` 缺省用 ("MA_CO", "MA_RT")。
     """
 
     def __init__(
@@ -151,6 +159,10 @@ class LinceDriftAnalysis(DefaultProcessor):
         session_key: str | None = None,
         train_session_keys: list[str] | None = None,
         result_prefix: str = "drift",
+        date_pattern: str = DEFAULT_DATE_PATTERN,
+        train_level: str = TRAIN_LEVEL,
+        holdout_levels: list[str] | None = None,
+        agg_level: str = AGG_LEVEL,
         name: str | None = None,
     ):
         super().__init__(name)
@@ -165,6 +177,12 @@ class LinceDriftAnalysis(DefaultProcessor):
         self.session_key = session_key
         self.train_session_keys = train_session_keys
         self.result_prefix = result_prefix
+        self.vocab = DriftVocabulary(
+            date_pattern=date_pattern,
+            train_level=train_level,
+            holdout_levels=tuple(holdout_levels) if holdout_levels else HOLDOUT_LEVELS,
+            agg_level=agg_level,
+        )
         self.result: DriftAnalysisResult | None = None
 
     def _process(self, context: Any) -> Any:
@@ -208,7 +226,7 @@ class LinceDriftAnalysis(DefaultProcessor):
         ]
 
     def _run_batch(self, context: Any, inputs: list[DriftSessionInput]) -> None:
-        result = compute_drift_metrics(inputs)
+        result = compute_drift_metrics(inputs, self.vocab)
         self.result = result
         summary = {f: _jsonable(getattr(result, f)) for f in SUMMARY_FIELDS}
         for m in result.sessions:
@@ -230,8 +248,8 @@ class LinceDriftAnalysis(DefaultProcessor):
         if not self.session_key or not self.train_session_keys:
             logger.warning("[drift] context 模式缺 session_key/train_session_keys，gap_days=NaN")
             return float("nan")
-        target = parse_session_date(self.session_key)
-        return float((target - max(parse_session_date(k) for k in self.train_session_keys)).days)
+        target = parse_session_date(self.session_key, self.vocab.date_pattern)
+        return float((target - max(parse_session_date(k, self.vocab.date_pattern) for k in self.train_session_keys)).days)
 
     def _run_context(self, context: Any) -> None:
         centroid = self._context_centroid(context)
