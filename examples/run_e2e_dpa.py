@@ -101,7 +101,7 @@ def _executed_configs(selection: dict[str, Any], results: dict[str, Any]) -> tup
         if cfg != HEAD_REFIT_CFG:
             raise ValueError(f"{tag} 选定法 {cfg} 非恒等且非 HeadRefit，链上方法通道未接线（gate-fail）")
         means = {c: sum(r["accuracy"] for r in results["rows"] if r["tag"] == tag and r["config"] == c and r["proxy"] in PROXIES) / len(PROXIES) for c in SUBSTITUTE_CANDIDATES}
-        winner = max(SUBSTITUTE_CANDIDATES, key=lambda c: (means[c], -SUBSTITUTE_CANDIDATES.index(c)))
+        winner = max(SUBSTITUTE_CANDIDATES, key=lambda c: means[c])
         executed[tag] = winner
         substitute[tag] = f"HeadRefit→{winner}"
         if winner != IDENTITY_CFG:
