@@ -15,7 +15,7 @@ import xarray as xr
 from linxi.processor import PROCESS_STAGES, DefaultProcessor, register_as_linxi_processor
 from linshu_format.core import BinnedSpikes, EcephysRecording, EcephysSortResult, NeuronInfo, TimeIntervals, TimeSeries, Unit
 
-from .dpa_nwb import DpaSessionArrays, check_role_columns, parse_session_name, read_dpa_nwb
+from .dpa_nwb import DpaSessionArrays, read_dpa_nwb
 
 if TYPE_CHECKING:
     from linxi.fabric.linxi_context import LinxiContext
@@ -198,10 +198,8 @@ __all__ = [
     "DpaSessionArrays",
     "LoadLinceDpaSession",
     "UNITS_LEVELS_ATTR",
-    "check_role_columns",
     "dpa_units",
     "flatten_units_channel_coord",
-    "parse_session_name",
     "read_dpa_nwb",
     "units_frame",
 ]
