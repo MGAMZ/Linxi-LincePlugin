@@ -104,7 +104,7 @@ query 侧落位：FR 速率矩阵（已剥除源中混入数据区的 trial/bin 
 
 ### DpaBaselineInfer
 
-对 DPA 评测文件执行赛道 baseline 分类解码，`method="baseline"` 按评测文件所在子挑战目录路由：`challenge2` = 恒等 region 池化 linear SVC（6 c2 train 拼接训练、五折 CV 选 C、全训练集重训、赛道评分器打分）；`challenge1` = 教程 unit_space 同日五折 CV（CV 指标即 `metrics` 的 `mem_acc` / `corr_acc`，预测列为 final model 对该文件全部 trial 的样本内预测，CV 明细以 `lince_dpa_c1_cv` 顶层键入侧车）。特征构造、超参网格与评分公式全部经 `track_root` 运行时指针装载的赛道模块执行，插件复刻零数值路径；推理前后对赛道数值路径源码做 sha256 清单守卫。逐 trial 预测 `mem_pred_lbl` / `corr_pred_lbl` 挂入 query 侧试次表；评测载荷写 `context.metrics` 暂存袋标准键 `metrics`（`split`、`subject`、`session_date`、`mem_acc`、`corr_acc`、`session_score`、`n_trials`、`method`），由 `ExportEvalMetrics` 袋透传写侧车。c2 无标签评测角色（`eval` / `eval-2`）照常产出预测与提交契约件，`metrics` 三比值落 null。
+对 DPA 评测文件执行赛道 baseline 分类解码，`method="baseline"` 按评测文件所在子挑战目录路由：`challenge2` = 恒等 region 池化 linear SVC（6 c2 train 拼接训练、五折 CV 选 C、全训练集重训、赛道评分器打分）；`challenge1` = 教程 unit_space 同日五折 CV（CV 指标即 `metrics` 的 `mem_acc` / `corr_acc`，预测列为 final model 对该文件全部 trial 的样本内预测，CV 明细以 `lince_dpa_c1_cv` 顶层键入侧车）。特征构造、超参网格与评分公式全部经 `track_root` 运行时指针装载的赛道模块执行，插件零数值路径复刻；推理前后对赛道数值路径源码做 sha256 清单守卫。逐 trial 预测 `mem_pred_lbl` / `corr_pred_lbl` 挂入 query 侧试次表；评测载荷写 `context.metrics` 暂存袋标准键 `metrics`（`split`、`subject`、`session_date`、`mem_acc`、`corr_acc`、`session_score`、`n_trials`、`method`），由 `ExportEvalMetrics` 袋透传写侧车。c2 无标签评测角色（`eval` / `eval-2`）照常产出预测与提交契约件，`metrics` 三比值落 null。
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
@@ -127,6 +127,10 @@ query 侧落位：FR 速率矩阵（已剥除源中混入数据区的 trial/bin 
 | `centroid_key` / `centroid` | `None` | 质心来源（记录键或 512 维向量），至少提供其一 |
 | `session_key` / `train_session_keys` | `None` | 目标 session 与训练 session 名（gap_days 用） |
 | `result_prefix` | "drift" | 输出列名前缀 |
+| `date_pattern` | `r"MA-[A-Z]{2}-(\d{8})-\d{2}"` | 会话目录名日期正则，首个捕获组为 8 位日期（gap_days 解析） |
+| `train_level` | "train" | 质心与 train 末日取样的层名 |
+| `holdout_levels` | `None` → ("easy", "normal", "hard") | gap×cos 相关的取样层集合 |
+| `agg_level` | "hard" | 批次聚合均值针对的层名（聚合字段名保持 `*_mean_hard` 字面量） |
 | `name` | `None` | 算子实例名 |
 
 ### LinceWriteLinshuFile
@@ -212,7 +216,7 @@ runner = TaskRunner(pipeline)
 
 ```text
 Linxi-LincePlugin/
-├── linxi_linceplugin/        # 算子源码（含五个赛题算子与模板示例算子）
+├── linxi_linceplugin/        # 算子源码（含两赛道七个赛题算子与模板示例算子）
 ├── examples/                 # 端到端示例 YAML 与驱动脚本
 ├── NEXTSTEPS.md
 ├── pyproject.toml
