@@ -35,6 +35,8 @@ def _plain(value: object) -> Any:
 
 
 _COORD_RENAMES = {"channel": "unit_channel"}
+# 导出侧多级坐标展开的层级序属性名（列化落盘的 units 表自描述，读回经 `units_frame_from_disk` 还原）。
+UNITS_LEVELS_ATTR = "lince_units_levels"
 
 
 def _channel_coord(units: pd.DataFrame) -> xr.DataArray:
@@ -146,6 +148,33 @@ class LoadLinceDpaSession(DefaultProcessor):
         return context
 
 
+def flatten_units_channel_coord(matrix: xr.DataArray) -> xr.DataArray | None:
+    """矩阵 channel 坐标为 units 表 MultiIndex 时 reset_index 展开为逐 level 坐标列并返回副本，非该形态返回 None。
+
+    xarray→zarr 编码层拒序列化 MultiIndex 坐标（``NotImplementedError: variable 'channel' is a MultiIndex,
+    which cannot yet be serialized``），导出前须列化；层级序记入 `UNITS_LEVELS_ATTR` 属性供读回。
+    """
+    index = matrix.indexes.get("channel") if "channel" in matrix.dims else None
+    if not isinstance(index, pd.MultiIndex):
+        return None
+    flat = matrix.reset_index("channel", drop=False)
+    return flat.assign_attrs({**matrix.attrs, UNITS_LEVELS_ATTR: list(index.names)})
+
+
+def units_frame(matrix: xr.DataArray) -> pd.DataFrame:
+    """units 矩阵的 channel 坐标 → units 表，列集与列序同 `read_dpa_nwb` 的 units 帧。
+
+    接受两形态：内存 MultiIndex（载入态，`_channel_coord` 产出）与落盘逐 level 坐标列
+    （`flatten_units_channel_coord` 输出经 `from_zarr` 读回）。
+    """
+    index = matrix.indexes.get("channel") if "channel" in matrix.dims else None
+    if isinstance(index, pd.MultiIndex):
+        return index.to_frame(index=False).rename(columns={v: k for k, v in _COORD_RENAMES.items()})
+    levels = matrix.attrs[UNITS_LEVELS_ATTR]
+    frame = pd.DataFrame({name: np.asarray(matrix.coords[name].values) for name in levels})
+    return frame.rename(columns={v: k for k, v in _COORD_RENAMES.items()})
+
+
 def dpa_units(context: Any, side: str) -> pd.DataFrame:
     """逐侧 units 表（列集与列序同 `read_dpa_nwb` 的 units 帧）：query 侧取 `binned_spikes` 的 channel 坐标，support 侧取记录主信号的 channel 坐标。"""
     if side == "query":
@@ -168,8 +197,11 @@ def dpa_units(context: Any, side: str) -> pd.DataFrame:
 __all__ = [
     "DpaSessionArrays",
     "LoadLinceDpaSession",
+    "UNITS_LEVELS_ATTR",
     "check_role_columns",
     "dpa_units",
+    "flatten_units_channel_coord",
     "parse_session_name",
     "read_dpa_nwb",
+    "units_frame",
 ]

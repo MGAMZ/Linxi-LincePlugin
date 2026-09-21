@@ -1,8 +1,14 @@
-"""临策赛道 LinshuFile 导出接线（EXPORT 阶段）：把流水线中的记录与评测结果写出为 ``.ls`` 产物。"""
+"""临策赛道 LinshuFile 导出接线（EXPORT 阶段）：把流水线中的记录与评测结果写出为 ``.ls`` 产物。
+
+DPA 类 context 的 units 表以 pandas MultiIndex 挂在矩阵 channel 坐标上，xarray→zarr 编码层拒序列化
+多级索引；本接线层在调用上游写出前把该形态展开为逐 level 坐标列（`flatten_units_channel_coord`），
+展开清单登记进根 ``notes``，写出后把 context 恢复为载入态。运动类 context 无该形态，接线零触碰。
+"""
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import xarray as xr
@@ -12,12 +18,15 @@ from linxi.processor import DefaultProcessor, PROCESS_STAGES, register_as_linxi_
 from linxi.processor.export import WriteLinshuFile
 from linshu_format.core import TimeIntervals
 
+from .load_dpa_session import UNITS_LEVELS_ATTR, flatten_units_channel_coord
+
 if TYPE_CHECKING:
     from linxi.fabric.linxi_context import LinxiContext
 
 __all__ = ["LinceExportError", "LinceWriteLinshuFile"]
 
 _NUMERIC_KINDS = frozenset("biuf")
+_NOTES_EXPORT_KEY = "lince_dpa_export"
 
 
 class LinceExportError(RuntimeError):
@@ -121,9 +130,53 @@ class LinceWriteLinshuFile(DefaultProcessor):
     def _process(self, context: LinxiContext) -> LinxiContext:
         self._check_signal_slots(context)
         self._normalize_trials(context)
-        context = self._writer(context)
+        restore = self._flatten_units_coords(context)
+        try:
+            context = self._writer(context)
+        finally:
+            for holder, field, original in restore:
+                setattr(holder, field, original)
         self._check_product(context)
         return context
+
+    def _flatten_units_coords(self, context: LinxiContext) -> list[tuple[Any, str, xr.DataArray]]:
+        targets: list[tuple[Any, str, str, xr.DataArray]] = []
+        spikes = context.binned_spikes
+        if spikes is not None:
+            targets.append((spikes, "counts", "binned_spikes.counts", spikes.counts))
+        for key, slot in context.ecephys.items():
+            signal = slot.electrophysiology
+            if signal is not None:
+                targets.append((signal, "data", f"ecephys/{key}/electrophysiology.data", signal.data))
+
+        originals: list[tuple[Any, str, xr.DataArray]] = []
+        records: list[dict[str, Any]] = []
+        for holder, field, path, matrix in targets:
+            flat = flatten_units_channel_coord(matrix)
+            if flat is None:
+                continue
+            originals.append((holder, field, matrix))
+            records.append({"field": path, "levels": list(flat.attrs[UNITS_LEVELS_ATTR]), "shape": [int(s) for s in matrix.shape]})
+            setattr(holder, field, flat)
+        if originals:
+            self._register_coord_flatten(context, records)
+        return originals
+
+    @staticmethod
+    def _register_coord_flatten(context: LinxiContext, records: list[dict[str, Any]]) -> None:
+        logger.info(f"LinceWriteLinshuFile[dpa] units MultiIndex 坐标展开为 level 列: {records}")
+        merged: dict[str, Any]
+        if context.notes:
+            try:
+                merged = json.loads(context.notes)
+                if not isinstance(merged, dict):
+                    merged = {"lince_notes_previous": context.notes}
+            except ValueError:
+                merged = {"lince_notes_previous": context.notes}
+        else:
+            merged = {}
+        merged[_NOTES_EXPORT_KEY] = {"units_coord_flatten": records}
+        context.notes = json.dumps(merged, ensure_ascii=False, sort_keys=True)
 
     def _check_signal_slots(self, context: LinxiContext) -> None:
         if context.recording is None:
