@@ -35,7 +35,7 @@ def _plain(value: object) -> Any:
 
 
 _COORD_RENAMES = {"channel": "unit_channel"}
-# 导出侧多级坐标展开的层级序属性名（列化落盘的 units 表自描述，读回经 `units_frame_from_disk` 还原）。
+# 导出侧多级坐标展开的层级序属性名（列化落盘的 units 表自描述，读回经 `units_frame` 还原）。
 UNITS_LEVELS_ATTR = "lince_units_levels"
 
 
