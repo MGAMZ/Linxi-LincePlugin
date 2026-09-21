@@ -1,6 +1,6 @@
 # 下一步
 
-1. 确保 Linxi 安装在与你的插件相同的 Python 环境中。Linxi 竞赛正式上线时提供 PyPI 版本，执行 `python -m pip install linxi`（连同 `linshu-format` 依赖一并装入当前环境）。
+1. 确保 Linxi 安装在与你的插件相同的 Python 环境中。执行 `python -m pip install linxi`（`linshu-format` 依赖随其自动装入当前环境）。
    - 校验：`python -c "import linxi"` 无报错。
 2. 执行 `python -m pip install -e .`，把当前插件仓库安装为可编辑模式。
 3. 根据你的业务需要修改 `linxi_linceplugin` 包中的示例代码。

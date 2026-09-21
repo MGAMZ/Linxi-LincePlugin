@@ -8,16 +8,16 @@
 ### 环境与网络要求
 
 - Python >= 3.12
-- 网络可访问 PyPI，且可读取 `git+https://gitee.com/lgl-tianqiong/TianSuo-Trodes.git`
+- 网络可访问 PyPI
 - 数据集与赛道 baseline 代码目录 `challenge_code`
 
 ### Linxi 的获取
 
-Linxi 未发布到 PyPI。竞赛正式上线时，将提供公开可用的PyPI版本，通过 `pip install linxi` 安装。
+Linxi 已发布于 PyPI，通过 `pip install linxi` 安装；`linshu-format`、`linxi-trodes` 依赖随其自动装入。
 
 ### 安装 Linxi 与 linshu-format
 
-1. `pip install linxi linshu-format` (待竞赛开赛时，这两个仓库已经上传至PyPI)
+1. `pip install linxi linshu-format`
 2. 校验：`python -c "import linxi"` 无报错
 
 ### 安装本插件仓库
