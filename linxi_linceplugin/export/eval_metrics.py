@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from linxi.logger import logger
 from linxi.processor import DefaultProcessor, PROCESS_STAGES, register_as_linxi_processor
 
-from .linshufile import LinceExportError
+from ._trials import LinceExportError
 
 if TYPE_CHECKING:
     from linxi.fabric.linxi_context import LinxiContext

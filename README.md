@@ -1,6 +1,6 @@
 # Linxi-LincePlugin
 
-临策算法竞赛通用算子插件仓库。面向"运动跨天解码"赛道提供五个 Linxi 算子：赛题 NWB 载入、赛道 baseline 解码推理、跨天漂移指标、LinshuFile 导出、评测侧车导出；面向"记忆状态跨个体跨天解码"赛道提供 DPA session 的 units-based NWB 载入算子与 baseline 分类解码推理算子。
+临策算法竞赛通用算子插件仓库。面向"运动跨天解码"赛道提供赛题 NWB 载入、baseline 解码推理、跨天漂移指标算子；面向"记忆状态跨个体跨天解码"赛道提供 DPA session 的 units-based NWB 载入与 baseline 分类解码算子；面向"基于人类硬膜外脑电的运动解码"赛道提供 BDF 三件套载入、评测动作窗口截取与 baseline 解码算子；三条赛道共用 LinshuFile 导出接线与评测侧车导出算子。
 一条 pipeline YAML 即可对原始数据进行处理并输出 `.ls` 数据文件与同级评测侧车 JSON。
 
 ## 安装前提
@@ -32,14 +32,15 @@ python -m pip install -e .
 
 | 组 | 包 | 用途 |
 |---|---|---|
-| 必选 | scikit-learn | WF baseline 解码（`BaselineDecodeInfer` 的 `model="wf"` 路径，纯 CPU） |
+| 必选 | scikit-learn | WF baseline 解码（`BaselineDecodeInfer` 的 `model="wf"` 路径，纯 CPU）、NEO 赛道 baseline（`EpiBaselineInfer`） |
+| 必选 | pyedflib | NEO 赛道 BDF 三件套读取 |
 | 可选 extras `[gru]` | torch | GRU baseline 解码（`model="gru"`） |
 
 ## 算子与注册
 
 在配置文件中增加以下字段：
 
-算子模块按赛道分为三个子包：`hand_motion_decode`（运动跨天解码）、`memory_state_decode`（记忆状态跨个体跨天解码）、`export`（两赛道共用导出）。`linxi_plugin` 字段逐模块导入并触发注册，一条链只需列出该链用到的模块：
+算子模块按赛道分为四个子包：`hand_motion_decode`（运动跨天解码）、`memory_state_decode`（记忆状态跨个体跨天解码）、`epidural_motion_decode`（基于人类硬膜外脑电的运动解码）、`export`（跨赛道共用导出）。`linxi_plugin` 字段逐模块导入并触发注册，一条链只需列出该链用到的模块：
 
 ```yaml
 linxi_plugin:
@@ -50,8 +51,13 @@ linxi_plugin:
   # memory_state_decode 赛道
   - linxi_linceplugin.memory_state_decode.load_session
   - linxi_linceplugin.memory_state_decode.decode_baseline
-  # 两赛道共用导出
+  # epidural_motion_decode 赛道
+  - linxi_linceplugin.epidural_motion_decode.load_session
+  - linxi_linceplugin.epidural_motion_decode.action_windows
+  - linxi_linceplugin.epidural_motion_decode.decode_baseline
+  # 共用导出
   - linxi_linceplugin.export.linshufile
+  - linxi_linceplugin.export.eeg_linshufile
   - linxi_linceplugin.export.eval_metrics
 ```
 
@@ -59,10 +65,14 @@ linxi_plugin:
 |---|---|---|---|
 | load | `LoadLinceSession` | `linxi_linceplugin.hand_motion_decode.load_session` | 单个赛题 session 的 NWB 投影进临析内部表示 |
 | load | `LoadLinceDpaSession` | `linxi_linceplugin.memory_state_decode.load_session` | 单个 DPA session 的 units-based NWB 投影进临析内部表示 |
+| load | `LoadLinceEpiSession` | `linxi_linceplugin.epidural_motion_decode.load_session` | 单个 NEO session 目录（BDF 三件套）投影进临析内部表示 |
+| preprocess | `EpiExtractActionWindows` | `linxi_linceplugin.epidural_motion_decode.action_windows` | 按评测契约截取逐试次动作窗口并扩展试次表 |
 | postprocess | `BaselineDecodeInfer` | `linxi_linceplugin.hand_motion_decode.decode_baseline` | 预置权重 WF/GRU baseline 解码推理与官方口径评分 |
 | postprocess | `DpaBaselineInfer` | `linxi_linceplugin.memory_state_decode.decode_baseline` | DPA 赛道 baseline 分类解码（按子挑战路由，赛道运行时指针管线，评测载荷入暂存袋经侧车袋透传） |
+| postprocess | `EpiBaselineInfer` | `linxi_linceplugin.epidural_motion_decode.decode_baseline` | NEO 赛道 baseline 解码（log PSD + 收缩线性 LDA 统一 8 分类，官方合并训练口径） |
 | analyze | `LinceDriftAnalysis` | `linxi_linceplugin.hand_motion_decode.drift_analysis` | 跨天漂移指标（cos_raw、cos_centered、norm_ratio、gap-days 相关） |
-| export | `LinceWriteLinshuFile` | `linxi_linceplugin.export.linshufile` | 表示层接线上游 `WriteLinshuFile` 写出 `.ls` |
+| export | `LinceWriteLinshuFile` | `linxi_linceplugin.export.linshufile` | ecephys 系记录接线上游 `WriteLinshuFile` 写出 `.ls` |
+| export | `LinceWriteEegLinshuFile` | `linxi_linceplugin.export.eeg_linshufile` | `context.eeg` 连续电信号记录直写 `.ls`（含 trials 表表达性归一） |
 | export | `ExportEvalMetrics` | `linxi_linceplugin.export.eval_metrics` | 将 `context.metrics` 暂存袋写出为 `.ls` 同级 `<数据文件名>.eval.json` |
 
 ### LoadLinceSession
@@ -118,6 +128,37 @@ query 侧落位：FR 重建矩阵写根容器 `binned_spikes`（`time` 置空，
 | `method` | "baseline" | 方法配置名，当前可选 `"baseline"`；未知名 Fast Fail |
 | `name` | `None` | 算子实例名 |
 
+### LoadLinceEpiSession
+
+NEO 赛题的发布数据是 Neuracle/NEO 设备导出的 BDF 三件套（`data.bdf` 信号、`evt.bdf` 事件、`recordInformation.json` 元信息），且发布文件的头部不符合 EDF+/BDF+ 规范、无法被严格校验的读取器直开。本算子自定义只读载入：头部修复只作用于内存副本，数据文件保持原样；事件按成对的开始/结束 trigger 构建试次表，Trigger 编码语义按范式（目录名 `single-MA` / `dual-MA`）区分。信号写 `context.eeg[recording_key]` 的 `EEGRecording` 容器（`electrode_kind="epidural"`，单位伏特），试次表写其 `events`，query 侧同步写顶层 `context.trials`。试次表列：`trial_id`、`start_time`、`stop_time`、`trigger`、`label`（0–7 评分标签编码）。
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `input_path` | `None` | session 目录路径（必填传入），目录名以 `-single-MA` 或 `-dual-MA` 结尾 |
+| `recording_key` | "query" | query = 链上主记录（同步填顶层 `context.trials`）；support = 辅助记录（只写槽） |
+| `name` | `None` | 算子实例名 |
+
+### EpiExtractActionWindows
+
+按官方评测契约截取动作窗口：每试次取动作开始 trigger 后 0.2 s 起 2.0 s（1000 Hz 即 2000 点），窗口以 (time, channel) float32 存入试次表 `window_signal` 列，并追加 `window_start_sample`、`window_stop_sample`、`sample_id`（提交件命名 `{session}_onset_{trigger_sample}`）。窗口越出信号范围即时失败。
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `recording_key` | "query" | 读写的 `context.eeg` 槽键 |
+| `window_start` | 0.2 | 窗口起点相对动作开始的秒数 |
+| `window_duration` | 2.0 | 窗口秒数 |
+| `name` | `None` | 算子实例名 |
+
+### EpiBaselineInfer
+
+对 query 试次表的评测窗口执行官方基线口径的统一 8 分类解码：训练集从 `train_root` 下全部 session 目录重建（官方预处理与特征：窗口去线性趋势、50/100/150 Hz 陷波、Welch 0–150 Hz 4 Hz 分箱 log PSD、收缩线性 LDA、均匀类别先验），预测写回 `pred_label` 列，评测指标（`macro_f1`、`per_class_f1`、`n_eval_trials`、`n_train_trials`、`classes`、`method`）写 `context.metrics` 暂存区，由 `ExportEvalMetrics` 写出附件文件。与官方 `baseline_demo.ipynb` 的差异仅在插件侧独立实现了读取层，数值结果已与官方权重逐样本比较验证一致。
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `train_root` | 必填 | 训练 session 集合根目录（其下每个含 `data.bdf` 的子目录为一个 session，官方口径为全部 heldin） |
+| `recording_key` | "query" | 读写的 `context.eeg` 槽键 |
+| `name` | `None` | 算子实例名 |
+
 ### LinceDriftAnalysis
 
 计算跨天漂移指标，口径与赛道数据探查脚本一致。
@@ -151,6 +192,18 @@ query 侧落位：FR 重建矩阵写根容器 `binned_spikes`（`time` 置空，
 | `require_eval_cols` | `true` | 是否要求 trials 表含评测列 |
 | `structural_cols` | `None` | 非评测结构列集合（默认 `start_time`/`stop_time`/`trial_id`） |
 | `overwrite` / `skip_fields` / `skip_raw_signals` | `true` / `None` / `false` | 透传上游 `WriteLinshuFile` 的同名参数 |
+
+### LinceWriteEegLinshuFile
+
+`context.eeg` 中连续电信号记录的导出接线。上游 `WriteLinshuFile` 的 materialize 面向 ecephys 记录设计，要求 `context.recording` 在场，并向 ecephys 键写入空的占位记录，EEGRecording 类模态不适用。本算子先把 trials 表做与其余赛道一致的表达性归一（object 列分类与补齐，NEO 流水线的 `window_signal` 补齐为 `(trial, time, channel)` 规则数组并附 `window_signal_valid_len`），再调用 `LinxiContext.write` 直写 Zarr 目录 store，写出前后执行空壳与格式标记断言。
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `output_path` | 必填 | `.ls` store 路径 |
+| `recording_key` | "query" | `context.eeg` 槽键 |
+| `overwrite` / `skip_fields` | `true` / `None` | 覆盖策略；`skip_fields` 透传 `exclude_fields` |
+| `require_eval_cols` / `structural_cols` | `true` / `None` | 与 `LinceWriteLinshuFile` 同名参数同语义 |
+| `on_lossy` | "warn" | 有损策略：`"warn"` / `"fail"` |
 
 ## 端到端示例
 
@@ -186,11 +239,24 @@ python examples/run_e2e_dpa.py --chain m090eval \
   --selection <赛道仓库 output/csv/method_selection.json>
 ```
 
+### NEO 两条流水线示例
+
+`examples/e2e_epi_P01_20240905-single-MA.yaml`：训练集单动作 session 全流水线（载入 → 评测窗口 → baseline 推理 → 导出 `.ls` → 导出评测附件）。
+`examples/e2e_epi_P01_20241112-dual-MA.yaml`：训练集唯一组合动作 session 的同构流水线，验证双动作范式的 trigger 语义路由。
+两条流水线的判据：`.ls` 读回的逐样本 `pred_label` 与基线复现参考文件（官方 model.pkl 逐窗口推理标签 CSV）完全一致，评测附件中的 `macro_f1` 与按参考文件重算的数值一致，信号与窗口形状符合评测契约。
+
+```bash
+python examples/run_e2e_epi.py --chain both \
+  --data-root <NEO heldin 目录> \
+  --output-root <产物输出目录> \
+  --golden <赛道仓库 output/csv/heldin_predictions.csv>
+```
+
 ## 评测侧车文件
 
 导出段末尾的 `ExportEvalMetrics` 把 `context.metrics` 暂存袋序列化为与 `.ls` 数据文件同目录、同命名根的 `<数据文件名>.eval.json`（如 `MA-CO-20231227-01.ls` → `MA-CO-20231227-01.eval.json`）。本算子须在写出 `.ls` 的导出算子之后同段执行。
 
-顶层键固定为 `session_id`、`tier`、`span`、`metrics`、`drift_targets`，缺失键落 null；`metrics` 逐项由当链解码算子填充——运动链为 `n_bins`、`r2_x`、`r2_y`、`r2_mean_raw`、`r2_mean`、`total_latency_ms`、`latency_per_bin_ms`、`latency_score`、`session_score`、`support_trials`、`query_trials`，DPA 链为 `split`、`subject`、`session_date`、`mem_acc`、`corr_acc`、`session_score`、`n_trials`、`method`；`drift_targets` 为跨天漂移分析的目标会话清单。schema 之外的袋键一并写出。NaN 与 ±Inf 在序列化前统一转换为 null 并打印一条转换清单日志；非 JSON 原生对象即时抛 `TypeError`，不静默丢键。
+顶层键固定为 `session_id`、`tier`、`span`、`metrics`、`drift_targets`，缺失键落 null；`metrics` 逐项由当链解码算子填充——运动链为 `n_bins`、`r2_x`、`r2_y`、`r2_mean_raw`、`r2_mean`、`total_latency_ms`、`latency_per_bin_ms`、`latency_score`、`session_score`、`support_trials`、`query_trials`，DPA 链为 `split`、`subject`、`session_date`、`mem_acc`、`corr_acc`、`session_score`、`n_trials`、`method`，NEO 流水线为 `macro_f1`、`per_class_f1`、`n_eval_trials`、`n_train_trials`、`classes`、`method`；`drift_targets` 为跨天漂移分析的目标会话清单。schema 之外的袋键一并写出。NaN 与 ±Inf 在序列化前统一转换为 null 并打印一条转换清单日志；非 JSON 原生对象即时抛 `TypeError`，不静默丢键。
 
 驱动脚本从该侧车读取评测行。给出 `--golden` 时逐字段与官方黄金基准比较并打印绝对差（运动链容差 1e-4，DPA 链 1e-6 且 m090eval 链附逐 trial 翻转判据），session_score 另以黄金重合成复核，末尾打印 `PARITY PASS/FAIL`；同一配置重复运行时，侧车与 store 的确定性字段完全一致。
 
@@ -222,9 +288,10 @@ runner = TaskRunner(pipeline)
 ```text
 Linxi-LincePlugin/
 ├── linxi_linceplugin/
-│   ├── hand_motion_decode/   # 运动跨天解码赛道：载入、baseline 解码、漂移分析（下划线前缀为赛道内部支撑模块）
-│   ├── memory_state_decode/  # 记忆跨个体跨天解码赛道：载入、baseline 分类解码（_nwb 为 NWB 读取校验层）
-│   └── export/               # 两赛道共用：LinshuFile 导出接线、评测侧车导出
+│   ├── hand_motion_decode/      # 运动跨天解码赛道：载入、baseline 解码、漂移分析（下划线前缀为赛道内部支撑模块）
+│   ├── memory_state_decode/     # 记忆跨个体跨天解码赛道：载入、baseline 分类解码（_nwb 为 NWB 读取校验层）
+│   ├── epidural_motion_decode/  # 硬膜外运动解码赛道：BDF 载入、评测窗口、baseline 解码（_bdf 为读取与试次构建层）
+│   └── export/                  # 跨赛道共用：LinshuFile 导出接线（ecephys 系与 eeg 系）、评测侧车导出
 ├── examples/                 # 端到端示例 YAML 与驱动脚本
 ├── NEXTSTEPS.md
 ├── pyproject.toml

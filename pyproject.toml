@@ -13,8 +13,10 @@ authors = [
     { name = "mgam", email = "312065559@qq.com" }
 ]
 dependencies = [
-    # WF baseline decoder (decode_baseline)
+    # WF baseline decoder (decode_baseline) and NEO baseline (EpiBaselineInfer)
     "scikit-learn",
+    # NEO 赛道 BDF 读取 (epidural_motion_decode._bdf)
+    "pyedflib",
 ]
 
 [project.optional-dependencies]
