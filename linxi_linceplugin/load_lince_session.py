@@ -1,6 +1,6 @@
-"""赛题 NWB → 临析内部表示的载入算子（LOAD 阶段）。
+"""赛题 NWB 到临析内部表示的载入算子（LOAD 阶段）：读取发放矩阵、光标信号与试次表。
 
-读取 session NWB 的发放矩阵、光标信号与 trial 表。query 侧（评测主记录）的计数矩阵与行为序列写入 LinshuFile 根容器 `binned_spikes` / `behavior_recording`，记录写入 `context.ecephys[recording_key]` 并携带试次表、`eval_mask` 辅助通道与会话起始时刻、时间基准声明，同步写顶层 `context.recording` 与 `context.trials`；support 侧（校准记录）整体写入 `context.ecephys[recording_key]`。session 标识由 NWB 所在目录相对 `data_root` 的路径派生。
+query 侧计数矩阵与行为序列写入根容器 `binned_spikes` / `behavior_recording`，support 侧整体写入 `context.ecephys[recording_key]`，session 标识由 NWB 相对 `data_root` 的路径派生。
 """
 
 from __future__ import annotations

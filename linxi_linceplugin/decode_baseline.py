@@ -1,6 +1,6 @@
-"""赛道 baseline 解码推理算子：以官方预置权重执行解码推理与 session 评分。
+"""赛道 baseline 解码推理算子（POSTPROCESS 阶段）：以官方预置权重执行解码推理与 session 评分。
 
-`source="context"`：消费流水线已载入的 query / support 记录，逐 bin 预测写回 query 记录的 auxiliary_channels["cursor_vel_pred_x" / "cursor_vel_pred_y"]，session 评测载荷写入 `context.metrics` 暂存袋（键 `session_id` / `tier` / `span` / `metrics`，由 `ExportEvalMetrics` 统一写出 eval JSON 侧车）。`source="sweep"`：从 `data_root` 自动发现并重跑全部（或筛选的）session。
+逐 bin 预测写回 query 记录的 auxiliary_channels，session 评测载荷写入 `context.metrics` 暂存袋，由 `ExportEvalMetrics` 统一写出 eval JSON 侧车。
 """
 
 from __future__ import annotations

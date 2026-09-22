@@ -1,9 +1,6 @@
-"""DPA 赛题 NWB 的读取与校验层（h5py 只读，与赛道加载层同一口径的断言清单）。
+"""DPA 赛题 NWB 的读取与校验层（h5py 只读）。
 
-校验项：nwb_version=2.9.0、文件名正则与文件内 subject_id/session_id 交叉、trials 列角色矩阵、
-delay_duration 整值、FR 形状 (Σdelay, 2+units)、FR 索引列逐元素语义（col0=0-based trial 主序、
-col1=1-based bin 序号）、units/trials id 恒等 arange、spike_times 三方计数与延迟窗落位。
-任一契约不符抛 ValueError（文案含路径与双方值）。
+读取发放率矩阵、units 表与试次表，任一结构契约不符时报错并附路径与双方值。
 """
 
 from __future__ import annotations

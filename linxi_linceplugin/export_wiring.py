@@ -1,8 +1,6 @@
-"""临策赛道 LinshuFile 导出接线（EXPORT 阶段）：把流水线中的记录与评测结果写出为 ``.ls`` 产物。
+"""临策赛道 LinshuFile 导出接线（EXPORT 阶段）：把流水线中的记录与评测结果写出为 `.ls` 产物。
 
-DPA 类 context 的 units 表以 pandas MultiIndex 挂在矩阵 channel 坐标上，xarray→zarr 编码层拒序列化
-多级索引；本接线层在调用上游写出前把该形态展开为逐 level 坐标列（`flatten_units_channel_coord`），
-展开清单登记进根 ``notes``，写出后把 context 恢复为载入态。运动类 context 无该形态，接线零触碰。
+写出前将 DPA units 的多级 channel 坐标展开为逐 level 列并登记展开清单于根 notes，写出后把 context 恢复为载入态，运动类 context 直通。
 """
 from __future__ import annotations
 

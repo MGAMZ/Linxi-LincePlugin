@@ -1,14 +1,6 @@
-"""DPA 赛道 baseline 分类解码推理算子：经赛道运行时指针执行 baseline 管线与参考评分。
+"""DPA 赛道 baseline 分类解码推理算子（POSTPROCESS 阶段）：经 `track_root` 指针装载的赛道模块执行 baseline 管线与参考评分，插件零数值路径复刻。
 
-特征构造、超参网格与评分公式全部经 `track_root` 指针装载的赛道模块执行，插件零数值路径复刻。
-baseline 通道按评测文件所在子挑战路由：challenge2 = 恒等 region 池化跨天管线（6 c2-train 拼接、
-五折 CV 选 C、重训产预测、赛道评分器打分）；challenge1 = 教程 unit_space 同日五折 CV
-（`repro_baseline_c1.cv_grid` 产 CV 指标，逐 trial 预测列 = `make_submissions.c1_submission`
-final model 对该文件全部 trial 的样本内预测）。
-评测文件经 `eval_path` 显式传入，与上游 `LoadLinceDpaSession` 的载入文件按命名主干交叉校验；
-逐 trial 预测 `mem_pred_lbl` / `corr_pred_lbl` 挂入 query 侧试次表，评测载荷写入
-`context.metrics` 暂存袋（键 `session_id` / `metrics`，由 `ExportEvalMetrics` 袋透传写出侧车）。
-无标签评测角色（eval / eval-2）照常产出预测与提交契约件，`metrics` 内三比值落 null。
+逐 trial 预测 `mem_pred_lbl` / `corr_pred_lbl` 挂入 query 侧试次表，评测载荷写入 `context.metrics` 暂存袋，由 `ExportEvalMetrics` 袋透传写出 eval JSON 侧车。
 """
 
 from __future__ import annotations

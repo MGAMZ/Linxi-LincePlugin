@@ -1,6 +1,6 @@
-"""DPA 赛题 NWB → 临析内部表示的载入算子（LOAD 阶段）。
+"""DPA 赛题 NWB 到临析内部表示的载入算子（LOAD 阶段）：读取发放率矩阵、units 表与试次表。
 
-读取 units-based DPA session 的发放率矩阵、units 表与 trial 表。query 侧（链上主记录）把速率矩阵写入 LinshuFile 根容器 `binned_spikes`（counts 的 channel 坐标列为完整 units 表），单元表与逐 spike 发放序列写入根容器 `neurons`，试次表同步写顶层 `context.trials` 与 `context.recording`；support 侧（校准记录）整体写入 `context.ecephys[recording_key]`，units 表挂在主信号数据的 channel 坐标列。session 标识取 NWB 文件名主干。本 schema 无 acquisition/electrodes，行为序列与试次时间投影均无对应物，不产出。
+query 侧的速率矩阵、单元表、试次表分别写入根容器 `binned_spikes` / `neurons` 与顶层 `context.trials`，support 侧整体写入 `context.ecephys[recording_key]`，session 标识取 NWB 文件名主干。
 """
 
 from __future__ import annotations

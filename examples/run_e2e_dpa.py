@@ -1,11 +1,6 @@
-"""临策 DPA e2e 示例驱动：替换 YAML 路径占位符后执行钉定链，逐链与自身 golden 对账。
+"""临策 DPA e2e 示例驱动：替换 YAML 路径占位符后运行预设链，逐链与 golden 基准比对。
 
-评测读数取自 store 同级 `<数据文件名>.eval.json` 侧车；逐 trial 翻转判据从 `.ls` 的 trials 表读回。
-用法与占位符说明见 examples/README.md。`--chain c1` golden = `output/csv/baseline_c1_cv.json`
-（unit_space 同日五折 CV）；`--chain m090eval` golden = `output/csv/methods_results.json` 的 m090 eval-1 行，
-逐标签实际执行法由 `output/csv/method_selection.json` 决定（选定法为 HeadRefit 时该标签代跑
-{恒等, CORAL, session_ensemble} 中该标签代理分最高者并登记 chain_substitute；代跑法非恒等即
-链上方法通道未接线，gate-fail 非零退出）。
+评测读数取自 store 同级 eval JSON 侧车，逐 trial 判据从 `.ls` 的 trials 表读回。
 """
 from __future__ import annotations
 

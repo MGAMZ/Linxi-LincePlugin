@@ -1,6 +1,6 @@
 """跨天漂移指标算子（ANALYZE 阶段）：计算逐 session 漂移指标与聚合结果。
 
-`source` 三态：`context` 读流水线已载入的 `ecephys` 槽，`sessions` 直传会话清单，`sweep` 扫描 `data_root`。context 态：逐通道真值列写入 `ecephys[k].channel_summary`，会话级目标指标写入 `context.metrics` 的 `drift_targets` 键（由 `ExportEvalMetrics` 统一写出 eval JSON 侧车）；批量态结果留存于算子实例与日志。
+context 态下逐通道真值列写入 `ecephys[k].channel_summary`，会话级目标指标写入 `context.metrics` 的 `drift_targets` 键，由 `ExportEvalMetrics` 统一写出 eval JSON 侧车。
 """
 
 from __future__ import annotations

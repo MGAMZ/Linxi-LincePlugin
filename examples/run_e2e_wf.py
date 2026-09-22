@@ -1,6 +1,6 @@
-"""临策 e2e WF 示例驱动：替换 YAML 路径占位符后执行流水线，可选与黄金结果对账。
+"""临策 e2e WF 示例驱动：替换 YAML 路径占位符后执行流水线，可选与 golden 基准比对。
 
-评测读数取自 store 同级 `<数据文件名>.eval.json` 侧车。用法与占位符说明见 examples/README.md。
+评测读数取自 store 同级 eval JSON 侧车。
 """
 
 from __future__ import annotations
