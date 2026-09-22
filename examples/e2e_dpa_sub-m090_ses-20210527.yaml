@@ -1,30 +1,30 @@
 # 临策·记忆状态跨个体跨天解码 — DPA m090 评测 session 端到端最小链路（双载入 → 基线推理 → LinshuFile 导出 → 评测侧车导出）。
-# 钉死 session：challenge2 / sub-m090_ses-20210527（评测日）。
+# 钉死 session：challenge3 / sub-m090_ses-20210527（评测日）。
 # 双输入：support = eval-2（288 trial 无标签，整体只落 ecephys 槽）；query = eval-1（32 trial 带标签，最后载入，context.session 落 eval-1）。
-# 链上推理 method=baseline：challenge2 路由 = 恒等 region 池化跨天管线（6 c2-train 拼接训练，对 eval-1 产预测与评分）；
+# 链上推理 method=baseline：challenge3 路由 = 恒等 region 池化跨个体管线（4 c3-train 拼接训练，对 eval-1 产预测与评分）；
 # 逐标签 golden 对照行 = output/csv/method_selection.json 选定法在 methods_results.json 的 m090 eval-1 行；选定法非恒等时按驱动代跑规则处置（见 run_e2e_dpa.py 文档串）。
 name: lince-e2e-dpa-sub-m090_ses-20210527
 linxi_plugin:
-  - linxi_linceplugin.load_dpa_session
-  - linxi_linceplugin.dpa_baseline_infer
-  - linxi_linceplugin.export_wiring
-  - linxi_linceplugin.eval_export
+  - linxi_linceplugin.memory_state_decode.load_session
+  - linxi_linceplugin.memory_state_decode.decode_baseline
+  - linxi_linceplugin.export.linshufile
+  - linxi_linceplugin.export.eval_metrics
 steps:
   - stage: load
     processor_name: "LoadLinceDpaSession"
     params:
-      input_path: "__DATA_ROOT__/challenge2/sub-m090_ses-20210527_task-DPA-eval-2.nwb"
+      input_path: "__DATA_ROOT__/challenge3/sub-m090_ses-20210527_task-DPA-eval-2.nwb"
       recording_key: "support"
   - stage: load
     processor_name: "LoadLinceDpaSession"
     params:
-      input_path: "__DATA_ROOT__/challenge2/sub-m090_ses-20210527_task-DPA-eval-1.nwb"
+      input_path: "__DATA_ROOT__/challenge3/sub-m090_ses-20210527_task-DPA-eval-1.nwb"
       recording_key: "query"
   - stage: postprocess
     processor_name: "DpaBaselineInfer"
     params:
       track_root: "__TRACK_ROOT__"
-      eval_path: "__DATA_ROOT__/challenge2/sub-m090_ses-20210527_task-DPA-eval-1.nwb"
+      eval_path: "__DATA_ROOT__/challenge3/sub-m090_ses-20210527_task-DPA-eval-1.nwb"
       method: "baseline"
   - stage: export
     processor_name: "LinceWriteLinshuFile"

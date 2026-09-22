@@ -16,7 +16,7 @@ from linxi.processor import DefaultProcessor, PROCESS_STAGES, register_as_linxi_
 from linxi.processor.export import WriteLinshuFile
 from linshu_format.core import TimeIntervals
 
-from .load_dpa_session import UNITS_LEVELS_ATTR, flatten_units_channel_coord
+from ..memory_state_decode.load_session import UNITS_LEVELS_ATTR, flatten_units_channel_coord
 
 if TYPE_CHECKING:
     from linxi.fabric.linxi_context import LinxiContext

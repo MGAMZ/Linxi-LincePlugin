@@ -29,7 +29,7 @@ from ._drift_core import (
     parse_session_date,
     session_fr,
 )
-from .load_lince_session import session_counts_matrix
+from .load_session import session_counts_matrix
 
 TARGETS_KEY = "drift_targets"
 TASKS = ("MA_CO", "MA_RT")

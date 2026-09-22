@@ -1,6 +1,7 @@
 """DPA 赛题 NWB 的读取与校验层（h5py 只读）。
 
-读取发放率矩阵、units 表与试次表，任一结构契约不符时报错并附路径与双方值。
+读取 units 表与试次表并校验结构契约，任一契约不符时报错并附路径与双方值。
+发放率矩阵由 `spike_times` 按 bin=floor(秒) 重建（0921 包部分文件的存储矩阵与试次指派错乱，仅作形状校验对象）。
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ Role = Literal["train", "eval", "eval-1", "eval-2"]
 NWB_RE = re.compile(
     r"^sub-(?P<subject>m\d+)_ses-(?P<date>\d{8})_task-DPA-(?P<role>train|eval|eval-1|eval-2)\.nwb$"
 )
-BASE_COLS = frozenset({"start_time", "stop_time", "delay_duration", "well_trained"})
+BASE_COLS = frozenset({"start_time", "stop_time", "delay_duration"})
 LABEL_COLS = frozenset({"sample_cue", "test_cue", "is_correct", "lick_response"})
 LABELLED_ROLES = frozenset({"train", "eval-1"})
 FR_SERIES_PATH = "processing/ecephys/Firing_rate_1000ms"
@@ -78,7 +79,11 @@ def check_role_columns(path: Path, role: Role, columns: frozenset[str]) -> None:
 
 @dataclass(frozen=True, slots=True)
 class DpaSessionArrays:
-    """单个 DPA session NWB 的只读物化结果，全部数值已脱离 HDF5 句柄。"""
+    """单个 DPA session NWB 的只读物化结果，全部数值已脱离 HDF5 句柄。
+
+    `fr` 为尖峰重建矩阵（float64 计数，1000 ms bin 的计数与 Hz 发放率数值相同）；
+    `trial_index` / `bin_index` 是与重建行序一致的规范索引列（trial 主序 0-based、trial 内 1-based）。
+    """
 
     subject: str
     session_date: str
@@ -141,23 +146,15 @@ def read_dpa_nwb(nwb_path: str | Path) -> DpaSessionArrays:
         if fr_unit != FR_DATASET_UNIT:
             raise ValueError(f"{p}: FR dataset unit {fr_unit!r} != {FR_DATASET_UNIT!r}")
         fr_description = _text(fr_series.attrs["description"])
-        fr_full = fr_data[:]
+        stored_shape = fr_data.shape
         n_units = len(units_df)
-        if fr_full.shape[1] != n_units + 2:
-            raise ValueError(f"{p}: FR 列数 {fr_full.shape[1]} ≠ units 行数 {n_units} + 2 索引列")
+        if stored_shape[1] != n_units + 2:
+            raise ValueError(f"{p}: FR 列数 {stored_shape[1]} ≠ units 行数 {n_units} + 2 索引列")
         delay_sum = int(delay_per_trial.sum())
-        if fr_full.shape[0] != delay_sum:
-            raise ValueError(f"{p}: FR 行数 {fr_full.shape[0]} ≠ Σdelay_duration {delay_sum}")
-        trial_index = fr_full[:, 0].astype(np.int64)
-        bin_index = fr_full[:, 1].astype(np.int64)
-        expected_trial = np.repeat(np.arange(len(delay_per_trial), dtype=np.int64), delay_per_trial)
-        expected_bin = np.concatenate([np.arange(1, int(d) + 1, dtype=np.int64) for d in delay_per_trial])
-        if not np.array_equal(trial_index, expected_trial):
-            raise ValueError(f"{p}: FR col0 与 0-based trial 主序（逐 trial 恰占 delay 行）不符")
-        if not np.array_equal(bin_index, expected_bin):
-            raise ValueError(f"{p}: FR col1 与 trial 内 1-based bin 序号不符")
-        fr = fr_full[:, 2:]
+        if stored_shape[0] != delay_sum:
+            raise ValueError(f"{p}: FR 行数 {stored_shape[0]} ≠ Σdelay_duration {delay_sum}")
 
+    fr, trial_index, bin_index = _rebuild_fr(spike_pairs, spike_ends, delay_per_trial, n_units)
     ends = np.cumsum(delay_per_trial)
     trial_slices = np.stack((ends - delay_per_trial, ends), axis=1).astype(np.int64)
     return DpaSessionArrays(
@@ -181,6 +178,24 @@ def _check_spike_counts(pairs: np.ndarray, ends: np.ndarray, n_spikes: np.ndarra
         raise ValueError(f"{path}: spike_times_index 与 n_spikes 累计和不一致")
     if int(ends[-1]) != len(pairs):
         raise ValueError(f"{path}: spike_times_index 末元素 {int(ends[-1])} != spike_times 行数 {len(pairs)}")
+
+
+def _rebuild_fr(pairs: np.ndarray, ends: np.ndarray, delays: np.ndarray, n_units: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """由尖峰时刻表重建 (Σdelay, n_units) 发放计数矩阵与规范 trial/bin 索引列。
+
+    尖峰已按 units 行序分段（分段边界 spike_times_index 累计和）；行号 = 所属 trial 行块起点 + floor(延迟内秒)。
+    """
+    trial = pairs[:, 0].astype(np.int64)
+    tsec = pairs[:, 1]
+    unit_col = np.repeat(np.arange(n_units, dtype=np.int64), np.diff(np.concatenate(([0], ends))))
+    starts = np.concatenate(([0], np.cumsum(delays)[:-1])) if delays.size else np.zeros(0, np.int64)
+    rows = starts[trial] + np.floor(tsec).astype(np.int64)
+    n_rows = int(delays.sum())
+    fr = np.zeros((n_rows, n_units), dtype=np.float64)
+    np.add.at(fr, (rows, unit_col), 1.0)
+    trial_index = np.repeat(np.arange(len(delays), dtype=np.int64), delays)
+    bin_index = np.concatenate([np.arange(1, int(d) + 1, dtype=np.int64) for d in delays]) if delays.size else np.zeros(0, np.int64)
+    return fr, trial_index, bin_index
 
 
 def _check_spike_windows(pairs: np.ndarray, delays: np.ndarray, path: Path) -> None:

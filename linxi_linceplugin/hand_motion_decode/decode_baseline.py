@@ -13,8 +13,8 @@ from linshu_format.core import TimeSeries
 from linxi.logger import logger
 from linxi.processor import DefaultProcessor, PROCESS_STAGES, register_as_linxi_processor
 
-from . import decode_engine
-from .load_lince_session import session_axis, session_behavior, session_counts_matrix
+from . import _engine
+from .load_session import session_axis, session_behavior, session_counts_matrix
 
 QUERY_KEY = "query"
 SUPPORT_KEY = "support"
@@ -112,10 +112,10 @@ class BaselineDecodeInfer(DefaultProcessor):
                 "BaselineDecodeInfer requires an explicit `data_root` processor param when `weights_dir` "
                 "is empty (preset weights resolve to `<data_root 上级>/challenge_code/Participant/...`)."
             )
-        return decode_engine.default_weights_dir(self.data_root, self.model)
+        return _engine.default_weights_dir(self.data_root, self.model)
 
     def _run_sweep(self) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
-        out = decode_engine.run_sweep(
+        out = _engine.run_sweep(
             model=self.model,
             baseline_code_path=self.baseline_code_path,
             data_root=self.data_root,
@@ -143,25 +143,25 @@ class BaselineDecodeInfer(DefaultProcessor):
                 "(the challenge `challenge_code` directory containing Platform/ and Participant/)."
             )
         weights = self._weights()
-        base_manifest = decode_engine.weights_manifest(weights, self.model)
+        base_manifest = _engine.weights_manifest(weights, self.model)
         if not base_manifest:
             raise FileNotFoundError(f"no preset weights found below: {weights}")
 
         def weights_check() -> None:
-            if decode_engine.weights_manifest(weights, self.model) != base_manifest:
+            if _engine.weights_manifest(weights, self.model) != base_manifest:
                 raise RuntimeError(f"preset weights changed during evaluation below: {weights}")
 
         x_query, y_query, query_trial_ids, query_timestamps = _session_arrays(context, QUERY_KEY)
         if self.strict_trial_counts:
-            found = decode_engine.count_trials(query_trial_ids)
-            expect = decode_engine.LEVEL_TRIALS[self.level][1]
+            found = _engine.count_trials(query_trial_ids)
+            expect = _engine.LEVEL_TRIALS[self.level][1]
             if found != expect:
                 raise ValueError(f"ecephys['{QUERY_KEY}'] expects {expect} trials, found {found}")
         if SUPPORT_KEY in context.ecephys:
             x_support, y_support, support_trial_ids, _ = _session_arrays(context, SUPPORT_KEY)
             if self.strict_trial_counts:
-                found = decode_engine.count_trials(support_trial_ids)
-                expect = decode_engine.LEVEL_TRIALS[self.level][0]
+                found = _engine.count_trials(support_trial_ids)
+                expect = _engine.LEVEL_TRIALS[self.level][0]
                 if found != expect:
                     raise ValueError(
                         f"ecephys['{SUPPORT_KEY}'] expects {expect} trials, found {found}"
@@ -172,15 +172,15 @@ class BaselineDecodeInfer(DefaultProcessor):
             )
             if overlap:
                 raise ValueError(f"Support/query trial_id overlap: {overlap[:10]}")
-            x_support, y_support = decode_engine.trial_only(x_support, y_support,
+            x_support, y_support = _engine.trial_only(x_support, y_support,
                                                             support_trial_ids)
         else:
             x_support = np.empty((0, x_query.shape[1]), dtype=np.float32)
             y_support = np.empty((0, 2), dtype=np.float32)
         query_mask = query_trial_ids >= 0
-        x_query, y_query = decode_engine.trial_only(x_query, y_query, query_trial_ids)
+        x_query, y_query = _engine.trial_only(x_query, y_query, query_trial_ids)
 
-        result, prediction = decode_engine.run_session(
+        result, prediction = _engine.run_session(
             task_name=self.task,
             level=self.level,
             horizon=self.horizon or None,
@@ -189,7 +189,7 @@ class BaselineDecodeInfer(DefaultProcessor):
             y_query=y_query,
             x_support=x_support,
             y_support=y_support,
-            submission_factory=lambda: decode_engine.make_submission(
+            submission_factory=lambda: _engine.make_submission(
                 self.model, self.baseline_code_path, weights
             ),
             weights_check=weights_check,

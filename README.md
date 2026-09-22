@@ -39,26 +39,31 @@ python -m pip install -e .
 
 在配置文件中增加以下字段：
 
+算子模块按赛道分为三个子包：`hand_motion_decode`（运动跨天解码）、`memory_state_decode`（记忆状态跨个体跨天解码）、`export`（两赛道共用导出）。`linxi_plugin` 字段逐模块导入并触发注册，一条链只需列出该链用到的模块：
+
 ```yaml
 linxi_plugin:
-  - linxi_linceplugin.load_lince_session
-  - linxi_linceplugin.load_dpa_session
-  - linxi_linceplugin.decode_baseline
-  - linxi_linceplugin.dpa_baseline_infer
-  - linxi_linceplugin.drift_analysis
-  - linxi_linceplugin.export_wiring
-  - linxi_linceplugin.eval_export
+  # hand_motion_decode 赛道
+  - linxi_linceplugin.hand_motion_decode.load_session
+  - linxi_linceplugin.hand_motion_decode.decode_baseline
+  - linxi_linceplugin.hand_motion_decode.drift_analysis
+  # memory_state_decode 赛道
+  - linxi_linceplugin.memory_state_decode.load_session
+  - linxi_linceplugin.memory_state_decode.decode_baseline
+  # 两赛道共用导出
+  - linxi_linceplugin.export.linshufile
+  - linxi_linceplugin.export.eval_metrics
 ```
 
 | stage | processor_name | 导入模块 | 描述 |
 |---|---|---|---|
-| load | `LoadLinceSession` | `linxi_linceplugin.load_lince_session` | 单个赛题 session 的 NWB 投影进临析内部表示 |
-| load | `LoadLinceDpaSession` | `linxi_linceplugin.load_dpa_session` | 单个 DPA session 的 units-based NWB 投影进临析内部表示 |
-| postprocess | `BaselineDecodeInfer` | `linxi_linceplugin.decode_baseline` | 预置权重 WF/GRU baseline 解码推理与官方口径评分 |
-| postprocess | `DpaBaselineInfer` | `linxi_linceplugin.dpa_baseline_infer` | DPA 赛道 baseline 分类解码（按子挑战路由，赛道运行时指针管线，评测载荷入暂存袋经侧车袋透传） |
-| analyze | `LinceDriftAnalysis` | `linxi_linceplugin.drift_analysis` | 跨天漂移指标（cos_raw、cos_centered、norm_ratio、gap-days 相关） |
-| export | `LinceWriteLinshuFile` | `linxi_linceplugin.export_wiring` | 表示层接线上游 `WriteLinshuFile` 写出 `.ls` |
-| export | `ExportEvalMetrics` | `linxi_linceplugin.eval_export` | 将 `context.metrics` 暂存袋写出为 `.ls` 同级 `<数据文件名>.eval.json` |
+| load | `LoadLinceSession` | `linxi_linceplugin.hand_motion_decode.load_session` | 单个赛题 session 的 NWB 投影进临析内部表示 |
+| load | `LoadLinceDpaSession` | `linxi_linceplugin.memory_state_decode.load_session` | 单个 DPA session 的 units-based NWB 投影进临析内部表示 |
+| postprocess | `BaselineDecodeInfer` | `linxi_linceplugin.hand_motion_decode.decode_baseline` | 预置权重 WF/GRU baseline 解码推理与官方口径评分 |
+| postprocess | `DpaBaselineInfer` | `linxi_linceplugin.memory_state_decode.decode_baseline` | DPA 赛道 baseline 分类解码（按子挑战路由，赛道运行时指针管线，评测载荷入暂存袋经侧车袋透传） |
+| analyze | `LinceDriftAnalysis` | `linxi_linceplugin.hand_motion_decode.drift_analysis` | 跨天漂移指标（cos_raw、cos_centered、norm_ratio、gap-days 相关） |
+| export | `LinceWriteLinshuFile` | `linxi_linceplugin.export.linshufile` | 表示层接线上游 `WriteLinshuFile` 写出 `.ls` |
+| export | `ExportEvalMetrics` | `linxi_linceplugin.export.eval_metrics` | 将 `context.metrics` 暂存袋写出为 `.ls` 同级 `<数据文件名>.eval.json` |
 
 ### LoadLinceSession
 
@@ -73,7 +78,7 @@ linxi_plugin:
 
 ### LoadLinceDpaSession
 
-DPA 赛题 NWB 只有 `units`、`intervals/trials` 与 `processing/ecephys/Firing_rate_1000ms` 三个实体位置，无 acquisition/electrodes，上游 `LoadNWB` 与运动侧载入字段假设均不适用，本算子按该 schema 自定义只读载入并做全契约校验（nwb 2.9.0、文件名 subject/date/role 与文件内标识交叉、trial 角色↔列矩阵、FR 形状与索引列语义、spike 计数三方一致）。
+DPA 赛题 NWB 只有 `units`、`intervals/trials` 与 `processing/ecephys/Firing_rate_1000ms` 三个实体位置，无 acquisition/electrodes，上游 `LoadNWB` 与运动侧载入字段假设均不适用，本算子按该 schema 自定义只读载入并做全契约校验（nwb 2.9.0、文件名 subject/date/role 与文件内标识交叉、trial 角色↔列矩阵、FR 形状、spike 计数三方一致）。发放率矩阵按赛道权威口径由 `spike_times` 重建，存储 `Firing_rate_1000ms` 矩阵仅作形状校验对象（0921 包部分文件的存储矩阵与试次指派错乱）。
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
@@ -81,7 +86,7 @@ DPA 赛题 NWB 只有 `units`、`intervals/trials` 与 `processing/ecephys/Firin
 | `recording_key` | "query" | query = 链上主记录；support = 校准记录（只写 `context.ecephys[recording_key]`） |
 | `name` | `None` | 算子实例名 |
 
-query 侧落位：FR 速率矩阵（已剥除源中混入数据区的 trial/bin 索引列）写根容器 `binned_spikes`（`time` 置空，行→时间语义由 `time_reference="delay_concat_bins"` 声明；units 表整体挂 counts 的 `channel` 多级坐标）；units 表与逐单元 spike 序列写根容器 `neurons`（`spike_samples` 为延迟拼接轴秒值，1 Hz 下 sample 即秒）；试次表写顶层 `context.trials` 与 `context.recording`。两侧的 `auxiliary_channels` 均物化 `trial_index`/`bin_index` 两条逐行索引序列。session 标识取 NWB 文件名主干。
+query 侧落位：FR 重建矩阵写根容器 `binned_spikes`（`time` 置空，行→时间语义由 `time_reference="delay_concat_bins"` 声明；units 表整体挂 counts 的 `channel` 多级坐标）；units 表与逐单元 spike 序列写根容器 `neurons`（`spike_samples` 为延迟拼接轴秒值，1 Hz 下 sample 即秒）；试次表写顶层 `context.trials` 与 `context.recording`。两侧的 `auxiliary_channels` 均物化 `trial_index`/`bin_index` 两条逐行索引序列。session 标识取 NWB 文件名主干。
 
 ### BaselineDecodeInfer
 
@@ -104,7 +109,7 @@ query 侧落位：FR 速率矩阵（已剥除源中混入数据区的 trial/bin 
 
 ### DpaBaselineInfer
 
-对 DPA 评测文件执行赛道 baseline 分类解码，`method="baseline"` 按评测文件所在子挑战目录路由：`challenge2` = 恒等 region 池化 linear SVC（6 c2 train 拼接训练、五折 CV 选 C、全训练集重训、赛道评分器打分）；`challenge1` = 教程 unit_space 同日五折 CV（CV 指标即 `metrics` 的 `mem_acc` / `corr_acc`，预测列为 final model 对该文件全部 trial 的样本内预测，CV 明细以 `lince_dpa_c1_cv` 顶层键入侧车）。特征构造、超参网格与评分公式全部经 `track_root` 运行时指针装载的赛道模块执行，插件零数值路径复刻；推理前后对赛道数值路径源码做 sha256 清单守卫。逐 trial 预测 `mem_pred_lbl` / `corr_pred_lbl` 挂入 query 侧试次表；评测载荷写 `context.metrics` 暂存袋标准键 `metrics`（`split`、`subject`、`session_date`、`mem_acc`、`corr_acc`、`session_score`、`n_trials`、`method`），由 `ExportEvalMetrics` 袋透传写侧车。c2 无标签评测角色（`eval` / `eval-2`）照常产出预测与提交契约件，`metrics` 三比值落 null。
+对 DPA 评测文件执行赛道 baseline 分类解码，`method="baseline"` 按评测文件所在子挑战目录路由：`challenge3` = 恒等 region 池化 linear SVC（challenge3 全部 train 拼接训练、五折 CV 选 C、全训练集重训、赛道评分器打分）；`challenge1` = 教程 unit_space 同日五折 CV（CV 指标即 `metrics` 的 `mem_acc` / `corr_acc`，预测列为 final model 对该文件全部 trial 的样本内预测，CV 明细以 `lince_dpa_c1_cv` 顶层键入侧车）。特征构造、超参网格与评分公式全部经 `track_root` 运行时指针装载的赛道模块执行，插件零数值路径复刻；推理前后对赛道数值路径源码做 sha256 清单守卫。逐 trial 预测 `mem_pred_lbl` / `corr_pred_lbl` 挂入 query 侧试次表；评测载荷写 `context.metrics` 暂存袋标准键 `metrics`（`split`、`subject`、`session_date`、`mem_acc`、`corr_acc`、`session_score`、`n_trials`、`method`），由 `ExportEvalMetrics` 袋透传写侧车。无标签评测角色（`eval` / `eval-2`）照常产出预测与提交契约件，`metrics` 三比值落 null。
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
@@ -135,7 +140,7 @@ query 侧落位：FR 速率矩阵（已剥除源中混入数据区的 trial/bin 
 
 ### LinceWriteLinshuFile
 
-将流水线中的记录与结果导出为 LinshuFile `.ls` 产物。DPA 类 context 的 units 表以 pandas MultiIndex 挂在矩阵 channel 坐标上，xarray→zarr 编码层拒序列化多级索引：本算子在写出前把该坐标展开为逐 level 坐标列（层级序记入 `lince_units_levels` 属性、展开清单登记进根 `notes`），写出后恢复载入态；无该形态的 context（如运动链）零触碰。读回经 `linxi_linceplugin.load_dpa_session.units_frame` 还原本表。
+将流水线中的记录与结果导出为 LinshuFile `.ls` 产物。DPA 类 context 的 units 表以 pandas MultiIndex 挂在矩阵 channel 坐标上，xarray→zarr 编码层拒序列化多级索引：本算子在写出前把该坐标展开为逐 level 坐标列（层级序记入 `lince_units_levels` 属性、展开清单登记进根 `notes`），写出后恢复载入态；无该形态的 context（如运动链）零触碰。读回经 `linxi_linceplugin.memory_state_decode.load_session.units_frame` 还原本表。
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
@@ -164,7 +169,7 @@ python examples/run_e2e_wf.py \
 ### DPA 双链示例
 
 `examples/e2e_dpa_sub-m091_ses-20210608.yaml`：challenge1 `sub-m091_ses-20210608` train 同天基线链（载入 → 推理 → 导出 `.ls` → 导出侧车），golden 对账 `baseline_c1_cv.json` 的 unit_space 五折 CV 数字。
-`examples/e2e_dpa_sub-m090_ses-20210527.yaml`：challenge2 `sub-m090_ses-20210527` 评测日双输入（support=eval-2、query=eval-1）恒等跨天链，golden 对账 `methods_results.json` 中各标签实际执行法（`method_selection.json` 选定法，HeadRefit 选定时代跑规则见 `run_e2e_dpa.py` 文档串）的 m090 eval-1 行，判据含逐 trial 预测翻转数 = 0。
+`examples/e2e_dpa_sub-m090_ses-20210527.yaml`：challenge3 `sub-m090_ses-20210527` 评测日双输入（support=eval-2、query=eval-1）恒等跨个体链，golden 对账 `methods_results.json` 中各标签实际执行法（`method_selection.json` 选定法，HeadRefit 选定时代跑规则见 `run_e2e_dpa.py` 文档串）的 m090 eval-1 行，判据含逐 trial 预测翻转数 = 0。
 
 ```bash
 python examples/run_e2e_dpa.py --chain c1 \
@@ -216,9 +221,11 @@ runner = TaskRunner(pipeline)
 
 ```text
 Linxi-LincePlugin/
-├── linxi_linceplugin/        # 算子源码（含两赛道七个赛题算子与模板示例算子）
+├── linxi_linceplugin/
+│   ├── hand_motion_decode/   # 运动跨天解码赛道：载入、baseline 解码、漂移分析（下划线前缀为赛道内部支撑模块）
+│   ├── memory_state_decode/  # 记忆跨个体跨天解码赛道：载入、baseline 分类解码（_nwb 为 NWB 读取校验层）
+│   └── export/               # 两赛道共用：LinshuFile 导出接线、评测侧车导出
 ├── examples/                 # 端到端示例 YAML 与驱动脚本
 ├── NEXTSTEPS.md
 ├── pyproject.toml
-└── README.md
 ```

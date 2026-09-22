@@ -19,7 +19,7 @@ import xarray as xr
 from linxi.logger import logger
 from linxi.processor import DefaultProcessor, PROCESS_STAGES, register_as_linxi_processor
 
-from .dpa_nwb import LABELLED_ROLES, parse_session_name
+from ._nwb import LABELLED_ROLES, parse_session_name
 
 if TYPE_CHECKING:
     from linxi.fabric.linxi_context import LinxiContext
@@ -32,7 +32,7 @@ EVAL_METRIC_FIELDS = (
 )
 _PRED_COLUMNS = ("mem_pred_lbl", "corr_pred_lbl")
 _TRAIN_GLOB = "*_task-DPA-train.nwb"
-_TRAIN_FILE_COUNT = 6
+_TRAIN_FILE_COUNT = 4
 _TRACK_SOURCE_DIRS = ("lince_memory", "scripts")
 
 
@@ -64,7 +64,7 @@ def load_track_pipeline(track_root: str) -> TrackPipeline:
         if entry not in sys.path:
             sys.path.insert(0, entry)
     scorer = importlib.import_module("lince_memory.scorer")
-    proxy = importlib.import_module("eval_c2_proxy")
+    proxy = importlib.import_module("eval_c3_proxy")
     paths = importlib.import_module("paths")
     features = importlib.import_module("lince_memory.features")
     data = importlib.import_module("lince_memory.data")
@@ -101,12 +101,12 @@ class InferOutcome:
     extra_bag: dict[str, Any] = field(default_factory=dict)
 
 
-def _run_c2_baseline(track: TrackPipeline, eval_file: Path, source_check: Callable[[], None]) -> InferOutcome:
-    """恒等 region 池化管线：6 c2 train 拼接训练、五折 CV 选 C、全训练集重训、对评测文件产预测并按赛道评分器打分。"""
-    train_files = sorted((track.data_root / "challenge2").glob(_TRAIN_GLOB))
+def _run_c3_baseline(track: TrackPipeline, eval_file: Path, source_check: Callable[[], None]) -> InferOutcome:
+    """恒等 region 池化跨个体管线：challenge3 全部 train 拼接训练、五折 CV 选 C、全训练集重训、对评测文件产预测并按赛道评分器打分。"""
+    train_files = sorted((track.data_root / "challenge3").glob(_TRAIN_GLOB))
     if len(train_files) != _TRAIN_FILE_COUNT:
         raise FileNotFoundError(
-            f"c2 train 应为 {_TRAIN_FILE_COUNT} 个 NWB，实际 {len(train_files)}：{track.data_root / 'challenge2'}"
+            f"c3 train 应为 {_TRAIN_FILE_COUNT} 个 NWB，实际 {len(train_files)}：{track.data_root / 'challenge3'}"
         )
     x, mem_y, corr_y, _ = track.train_matrix(train_files)
     models: dict[str, Any] = {}
@@ -122,7 +122,7 @@ def _run_c2_baseline(track: TrackPipeline, eval_file: Path, source_check: Callab
         source_check()
         sub = track.read_submission(sub_path)
         if role in LABELLED_ROLES:
-            session = track.score_sessions(((sub_path, eval_file),), combine="pooled").sessions[0]
+            session = track.score_sessions(((sub_path, eval_file),)).sessions[0]
             metrics: dict[str, Any] = {
                 "mem_acc": session.mem_accuracy, "corr_acc": session.corr_accuracy,
                 "session_score": session.session_score,
@@ -187,14 +187,14 @@ def _run_c1_baseline(track: TrackPipeline, eval_file: Path, source_check: Callab
 
 
 def _run_baseline(track: TrackPipeline, eval_file: Path, source_check: Callable[[], None]) -> InferOutcome:
-    """baseline 通道按评测文件所在子挑战目录路由（challenge1 同天 CV / challenge2 恒等跨天）。"""
+    """baseline 通道按评测文件所在子挑战目录路由（challenge1 同天 CV / challenge3 恒等跨个体）。"""
     match eval_file.parent.name:
         case "challenge1":
             return _run_c1_baseline(track, eval_file, source_check)
-        case "challenge2":
-            return _run_c2_baseline(track, eval_file, source_check)
+        case "challenge3":
+            return _run_c3_baseline(track, eval_file, source_check)
         case other:
-            raise ValueError(f"评测文件父目录 {other!r} 非 challenge1/challenge2，baseline 无法路由：{eval_file}")
+            raise ValueError(f"评测文件父目录 {other!r} 非 challenge1/challenge3，baseline 无法路由：{eval_file}")
 
 
 _METHODS: dict[str, Callable[[TrackPipeline, Path, Callable[[], None]], InferOutcome]] = {

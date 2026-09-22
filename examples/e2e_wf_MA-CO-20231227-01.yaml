@@ -5,11 +5,11 @@
 # WF bundle 自带 z-score 统计。
 name: lince-e2e-wf-MA-CO-20231227-01
 linxi_plugin:
-  - linxi_linceplugin.load_lince_session
-  - linxi_linceplugin.decode_baseline
-  - linxi_linceplugin.drift_analysis
-  - linxi_linceplugin.export_wiring
-  - linxi_linceplugin.eval_export
+  - linxi_linceplugin.hand_motion_decode.load_session
+  - linxi_linceplugin.hand_motion_decode.decode_baseline
+  - linxi_linceplugin.hand_motion_decode.drift_analysis
+  - linxi_linceplugin.export.linshufile
+  - linxi_linceplugin.export.eval_metrics
 steps:
   - stage: load
     processor_name: "LoadLinceSession"

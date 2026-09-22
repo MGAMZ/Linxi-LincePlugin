@@ -15,7 +15,7 @@ from uuid import uuid4
 
 import numpy as np
 
-from .decode_scoring import (
+from ._scoring import (
     EVALUATION_ORDER,
     LEVELS,
     LEVEL_TRIALS,

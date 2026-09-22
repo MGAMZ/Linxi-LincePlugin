@@ -4,10 +4,10 @@
 # 单输入链：context.session = 载入文件主干；units 表 MultiIndex channel 坐标由导出接线层展开为 level 列。
 name: lince-e2e-dpa-sub-m091_ses-20210608
 linxi_plugin:
-  - linxi_linceplugin.load_dpa_session
-  - linxi_linceplugin.dpa_baseline_infer
-  - linxi_linceplugin.export_wiring
-  - linxi_linceplugin.eval_export
+  - linxi_linceplugin.memory_state_decode.load_session
+  - linxi_linceplugin.memory_state_decode.decode_baseline
+  - linxi_linceplugin.export.linshufile
+  - linxi_linceplugin.export.eval_metrics
 steps:
   - stage: load
     processor_name: "LoadLinceDpaSession"

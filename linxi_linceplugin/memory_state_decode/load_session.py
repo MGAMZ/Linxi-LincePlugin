@@ -15,7 +15,7 @@ import xarray as xr
 from linxi.processor import PROCESS_STAGES, DefaultProcessor, register_as_linxi_processor
 from linshu_format.core import BinnedSpikes, EcephysRecording, EcephysSortResult, NeuronInfo, TimeIntervals, TimeSeries, Unit
 
-from .dpa_nwb import DpaSessionArrays, read_dpa_nwb
+from ._nwb import DpaSessionArrays, read_dpa_nwb
 
 if TYPE_CHECKING:
     from linxi.fabric.linxi_context import LinxiContext
@@ -77,8 +77,9 @@ def _dpa_neuron_info(arrays: DpaSessionArrays) -> NeuronInfo:
 def _binned_spikes(arrays: DpaSessionArrays) -> BinnedSpikes:
     """构建 query 侧速率矩阵的根容器 `binned_spikes`。
 
-    源数据无逐行真实时间戳（trial 延迟窗拼接后仅存索引列），`time` 置空、行→时间语义由
-    `time_reference` 声明；1000 ms bin 的发放率（Hz）在数值上等于该 bin 的尖峰计数，落入计数容器。
+    矩阵为载入层由 `spike_times` 重建的尖峰计数（存储 `Firing_rate_1000ms` 矩阵仅作形状校验对象）；
+    源数据无逐行真实时间戳（trial 延迟窗拼接轴），`time` 置空、行→时间语义由 `time_reference` 声明；
+    1000 ms bin 的发放率（Hz）在数值上等于该 bin 的尖峰计数，落入计数容器。
     """
     counts = xr.DataArray(arrays.fr, dims=("time", "channel"), coords={"channel": _channel_coord(arrays.units)})
     return BinnedSpikes(
