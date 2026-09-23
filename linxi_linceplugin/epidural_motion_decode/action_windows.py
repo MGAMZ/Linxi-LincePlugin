@@ -58,7 +58,7 @@ class EpiExtractActionWindows(DefaultProcessor):
     Parameters
     ----------
     recording_key:
-        读写的 `context.eeg` 槽键，默认 ``"query"``。
+        读写的 `context.ieeg` 槽键，默认 ``"query"``。
     window_start / window_duration:
         窗口相对动作开始的起点与时长（秒），默认 0.2 / 2.0，与官方评测窗口契约一致。
     """
@@ -76,9 +76,9 @@ class EpiExtractActionWindows(DefaultProcessor):
         self.window_duration = window_duration
 
     def _process(self, context: LinxiContext) -> LinxiContext:
-        slot = context.eeg.get(self.recording_key)
+        slot = context.ieeg.get(self.recording_key)
         if slot is None or slot.events is None:
-            raise ValueError(f"eeg[{self.recording_key!r}] 或其 events 为空：应由 LoadLinceEpiSession 先载入")
+            raise ValueError(f"ieeg[{self.recording_key!r}] 或其 events 为空：应由 LoadLinceEpiSession 先载入")
         matrix = epi_signal(context, self.recording_key)
         signal = np.asarray(matrix.values, dtype=np.float64)
         frame = trials_frame(slot.events.table)

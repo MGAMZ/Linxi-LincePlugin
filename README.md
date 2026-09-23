@@ -57,7 +57,7 @@ linxi_plugin:
   - linxi_linceplugin.epidural_motion_decode.decode_baseline
   # 共用导出
   - linxi_linceplugin.export.linshufile
-  - linxi_linceplugin.export.eeg_linshufile
+  - linxi_linceplugin.export.ieeg_linshufile
   - linxi_linceplugin.export.eval_metrics
 ```
 
@@ -72,7 +72,7 @@ linxi_plugin:
 | postprocess | `EpiBaselineInfer` | `linxi_linceplugin.epidural_motion_decode.decode_baseline` | NEO 赛道 baseline 解码（log PSD + 收缩线性 LDA 统一 8 分类，官方合并训练口径） |
 | analyze | `LinceDriftAnalysis` | `linxi_linceplugin.hand_motion_decode.drift_analysis` | 跨天漂移指标（cos_raw、cos_centered、norm_ratio、gap-days 相关） |
 | export | `LinceWriteLinshuFile` | `linxi_linceplugin.export.linshufile` | ecephys 系记录接线上游 `WriteLinshuFile` 写出 `.ls` |
-| export | `LinceWriteEegLinshuFile` | `linxi_linceplugin.export.eeg_linshufile` | `context.eeg` 连续电信号记录直写 `.ls`（含 trials 表表达性归一） |
+| export | `LinceWriteIeegLinshuFile` | `linxi_linceplugin.export.ieeg_linshufile` | `context.ieeg` 连续电位记录直写 `.ls`（含 trials 表表达性归一） |
 | export | `ExportEvalMetrics` | `linxi_linceplugin.export.eval_metrics` | 将 `context.metrics` 暂存袋写出为 `.ls` 同级 `<数据文件名>.eval.json` |
 
 ### LoadLinceSession
@@ -130,7 +130,7 @@ query 侧落位：FR 重建矩阵写根容器 `binned_spikes`（`time` 置空，
 
 ### LoadLinceEpiSession
 
-NEO 赛题的发布数据是 Neuracle/NEO 设备导出的 BDF 三件套（`data.bdf` 信号、`evt.bdf` 事件、`recordInformation.json` 元信息），且发布文件的头部不符合 EDF+/BDF+ 规范、无法被严格校验的读取器直开。本算子自定义只读载入：头部修复只作用于内存副本，数据文件保持原样；事件按成对的开始/结束 trigger 构建试次表，Trigger 编码语义按范式（目录名 `single-MA` / `dual-MA`）区分。信号写 `context.eeg[recording_key]` 的 `EEGRecording` 容器（`electrode_kind="epidural"`，单位伏特），试次表写其 `events`，query 侧同步写顶层 `context.trials`。试次表列：`trial_id`、`start_time`、`stop_time`、`trigger`、`label`（0–7 评分标签编码）。
+NEO 赛题的发布数据是 Neuracle/NEO 设备导出的 BDF 三件套（`data.bdf` 信号、`evt.bdf` 事件、`recordInformation.json` 元信息），且发布文件的头部不符合 EDF+/BDF+ 规范、无法被严格校验的读取器直开。本算子自定义只读载入：头部修复只作用于内存副本，数据文件保持原样；事件按成对的开始/结束 trigger 构建试次表，Trigger 编码语义按范式（目录名 `single-MA` / `dual-MA`）区分。信号写 `context.ieeg[recording_key]` 的 `iEEGRecording` 容器（`electrode_placement="epidural"`，单位伏特），试次表写其 `events`，query 侧同步写顶层 `context.trials`。试次表列：`trial_id`、`start_time`、`stop_time`、`trigger`、`label`（0–7 评分标签编码）。
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
@@ -144,7 +144,7 @@ NEO 赛题的发布数据是 Neuracle/NEO 设备导出的 BDF 三件套（`data.
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `recording_key` | "query" | 读写的 `context.eeg` 槽键 |
+| `recording_key` | "query" | 读写的 `context.ieeg` 槽键 |
 | `window_start` | 0.2 | 窗口起点相对动作开始的秒数 |
 | `window_duration` | 2.0 | 窗口秒数 |
 | `name` | `None` | 算子实例名 |
@@ -156,7 +156,7 @@ NEO 赛题的发布数据是 Neuracle/NEO 设备导出的 BDF 三件套（`data.
 | 参数 | 默认 | 说明 |
 |---|---|---|
 | `train_root` | 必填 | 训练 session 集合根目录（其下每个含 `data.bdf` 的子目录为一个 session，官方口径为全部 heldin） |
-| `recording_key` | "query" | 读写的 `context.eeg` 槽键 |
+| `recording_key` | "query" | 读写的 `context.ieeg` 槽键 |
 | `name` | `None` | 算子实例名 |
 
 ### LinceDriftAnalysis
@@ -193,14 +193,14 @@ NEO 赛题的发布数据是 Neuracle/NEO 设备导出的 BDF 三件套（`data.
 | `structural_cols` | `None` | 非评测结构列集合（默认 `start_time`/`stop_time`/`trial_id`） |
 | `overwrite` / `skip_fields` / `skip_raw_signals` | `true` / `None` / `false` | 透传上游 `WriteLinshuFile` 的同名参数 |
 
-### LinceWriteEegLinshuFile
+### LinceWriteIeegLinshuFile
 
-`context.eeg` 中连续电信号记录的导出接线。上游 `WriteLinshuFile` 的 materialize 面向 ecephys 记录设计，要求 `context.recording` 在场，并向 ecephys 键写入空的占位记录，EEGRecording 类模态不适用。本算子先把 trials 表做与其余赛道一致的表达性归一（object 列分类与补齐，NEO 流水线的 `window_signal` 补齐为 `(trial, time, channel)` 规则数组并附 `window_signal_valid_len`），再调用 `LinxiContext.write` 直写 Zarr 目录 store，写出前后执行空壳与格式标记断言。
+`context.ieeg` 中连续电位记录的导出接线。上游 `WriteLinshuFile` 的 materialize 面向 ecephys 记录设计，固定向 ecephys 键写入空的占位记录，iEEGRecording 类模态不适用。本算子先把 trials 表做与其余赛道一致的表达性归一（object 列分类与补齐，NEO 流水线的 `window_signal` 补齐为 `(trial, time, channel)` 规则数组并附 `window_signal_valid_len`），再调用 `LinxiContext.write` 直写 Zarr 目录 store，写出前后执行空壳与格式标记断言。
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
 | `output_path` | 必填 | `.ls` store 路径 |
-| `recording_key` | "query" | `context.eeg` 槽键 |
+| `recording_key` | "query" | `context.ieeg` 槽键 |
 | `overwrite` / `skip_fields` | `true` / `None` | 覆盖策略；`skip_fields` 透传 `exclude_fields` |
 | `require_eval_cols` / `structural_cols` | `true` / `None` | 与 `LinceWriteLinshuFile` 同名参数同语义 |
 | `on_lossy` | "warn" | 有损策略：`"warn"` / `"fail"` |
@@ -291,7 +291,7 @@ Linxi-LincePlugin/
 │   ├── hand_motion_decode/      # 运动跨天解码赛道：载入、baseline 解码、漂移分析（下划线前缀为赛道内部支撑模块）
 │   ├── memory_state_decode/     # 记忆跨个体跨天解码赛道：载入、baseline 分类解码（_nwb 为 NWB 读取校验层）
 │   ├── epidural_motion_decode/  # 硬膜外运动解码赛道：BDF 载入、评测窗口、baseline 解码（_bdf 为读取与试次构建层）
-│   └── export/                  # 跨赛道共用：LinshuFile 导出接线（ecephys 系与 eeg 系）、评测侧车导出
+│   └── export/                  # 跨赛道共用：LinshuFile 导出接线（ecephys 系与 ieeg 系）、评测侧车导出
 ├── examples/                 # 端到端示例 YAML 与驱动脚本
 ├── NEXTSTEPS.md
 ├── pyproject.toml

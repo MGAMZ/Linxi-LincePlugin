@@ -6,7 +6,7 @@ linxi_plugin:
   - linxi_linceplugin.epidural_motion_decode.load_session
   - linxi_linceplugin.epidural_motion_decode.action_windows
   - linxi_linceplugin.epidural_motion_decode.decode_baseline
-  - linxi_linceplugin.export.eeg_linshufile
+  - linxi_linceplugin.export.ieeg_linshufile
   - linxi_linceplugin.export.eval_metrics
 steps:
   - stage: load
@@ -26,7 +26,7 @@ steps:
       train_root: "__DATA_ROOT__"
       recording_key: "query"
   - stage: export
-    processor_name: "LinceWriteEegLinshuFile"
+    processor_name: "LinceWriteIeegLinshuFile"
     params:
       output_path: "__OUTPUT_ROOT__/P01_20241112-dual-MA.ls"
       recording_key: "query"

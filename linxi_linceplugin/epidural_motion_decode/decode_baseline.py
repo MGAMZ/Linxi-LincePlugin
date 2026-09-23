@@ -81,7 +81,7 @@ class EpiBaselineInfer(DefaultProcessor):
     train_root:
         训练 session 集合的根目录（其下每个含 `data.bdf` 的子目录为一个 session，官方口径为全部 heldin）。必须显式传入。
     recording_key:
-        读写的 `context.eeg` 槽键，默认 ``"query"``。
+        读写的 `context.ieeg` 槽键，默认 ``"query"``。
     """
 
     def __init__(self, train_root: str | None = None, recording_key: str = "query",
@@ -93,13 +93,13 @@ class EpiBaselineInfer(DefaultProcessor):
     def _process(self, context: LinxiContext) -> LinxiContext:
         if self.train_root is None:
             raise ValueError("EpiBaselineInfer requires an explicit `train_root` processor param")
-        slot = context.eeg.get(self.recording_key)
+        slot = context.ieeg.get(self.recording_key)
         if slot is None or slot.events is None:
-            raise ValueError(f"eeg[{self.recording_key!r}] 或其 events 为空：应由 LoadLinceEpiSession 先载入")
+            raise ValueError(f"ieeg[{self.recording_key!r}] 或其 events 为空：应由 LoadLinceEpiSession 先载入")
         table = slot.events.table
         if "window_signal" not in table.data_vars:
             raise ValueError(
-                f"eeg[{self.recording_key!r}] 试次表缺 window_signal 列：应先执行 EpiExtractActionWindows")
+                f"ieeg[{self.recording_key!r}] 试次表缺 window_signal 列：应先执行 EpiExtractActionWindows")
         frame = trials_frame(table)
         x_train, y_train = _train_dataset(Path(self.train_root))
         model = _make_lda8().fit(x_train, y_train)

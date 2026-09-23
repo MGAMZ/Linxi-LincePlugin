@@ -1,6 +1,6 @@
-"""连续电信号记录（`context.eeg` 中的记录）的 LinshuFile 导出接线（EXPORT 阶段）。
+"""连续电位记录（`context.ieeg` 中的记录）的 LinshuFile 导出接线（EXPORT 阶段）。
 
-上游 ``WriteLinshuFile`` 的 materialize 面向 ecephys 记录设计，要求 spikeinterface recording 在场并向 ecephys 键写入空占位记录，EEGRecording 类模态不适用。本接线对 trials 表执行与其他赛道一致的表达性归一后直接调用 ``LinxiContext.write`` 写出 Zarr 目录 store，评测附件文件仍由 `ExportEvalMetrics` 从 `run_state.output_path` 派生。
+上游 ``WriteLinshuFile`` 的 materialize 面向 ecephys 记录设计，固定向 ecephys 键写入空占位记录，iEEGRecording 类模态不适用。本接线对 trials 表执行与其他赛道一致的表达性归一后直接调用 ``LinxiContext.write`` 写出 Zarr 目录 store，评测附件文件仍由 `ExportEvalMetrics` 从 `run_state.output_path` 派生。
 """
 from __future__ import annotations
 
@@ -20,17 +20,17 @@ from ._trials import LinceExportError, lossy_policy_messages, normalize_trials
 if TYPE_CHECKING:
     from linxi.fabric.linxi_context import LinxiContext
 
-__all__ = ["LinceWriteEegLinshuFile"]
+__all__ = ["LinceWriteIeegLinshuFile"]
 
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.EXPORT)
-class LinceWriteEegLinshuFile(DefaultProcessor):
-    """把 `context.eeg[recording_key]` 记录与试次表评测列写出为 ``.ls``（Zarr 目录 store）。
+class LinceWriteIeegLinshuFile(DefaultProcessor):
+    """把 `context.ieeg[recording_key]` 记录与试次表评测列写出为 ``.ls``（Zarr 目录 store）。
 
     Example YAML configuration::
 
         - stage: export
-          processor_name: "LinceWriteEegLinshuFile"
+          processor_name: "LinceWriteIeegLinshuFile"
           params:
             output_path: "/path/to/output/P01_20240905-single-MA.ls"
             recording_key: "query"
@@ -42,7 +42,7 @@ class LinceWriteEegLinshuFile(DefaultProcessor):
     output_path : str
         `.ls` store 路径，必须显式传入。
     recording_key : str
-        `context.eeg` 槽键，临策单记录布局默认 ``"query"``。
+        `context.ieeg` 槽键，临策单记录布局默认 ``"query"``。
     overwrite : bool
         目标已存在时是否替换，透传语义与上游一致。
     skip_fields : list[str] | None
@@ -79,13 +79,13 @@ class LinceWriteEegLinshuFile(DefaultProcessor):
     def _process(self, context: LinxiContext) -> LinxiContext:
         if self.output_path is None:
             raise LinceExportError(
-                "LinceWriteEegLinshuFile requires an explicit `output_path` processor param")
-        slot = context.eeg.get(self.recording_key)
+                "LinceWriteIeegLinshuFile requires an explicit `output_path` processor param")
+        slot = context.ieeg.get(self.recording_key)
         if slot is None:
-            raise LinceExportError(f"context.eeg 缺信号槽 {self.recording_key!r}（现有键={sorted(context.eeg)}）")
+            raise LinceExportError(f"context.ieeg 缺信号槽 {self.recording_key!r}（现有键={sorted(context.ieeg)}）")
         if slot.electrophysiology is None:
             raise LinceExportError(
-                f"eeg[{self.recording_key!r}].electrophysiology 为空：信号槽须由 load 算子预填")
+                f"ieeg[{self.recording_key!r}].electrophysiology 为空：信号槽须由 load 算子预填")
         if context.trials is None and self._require_eval_cols:
             raise LinceExportError("context.trials 为 None：无评测试次表可导出；如仅需信号导出请显式 require_eval_cols=False")
 
@@ -94,7 +94,7 @@ class LinceWriteEegLinshuFile(DefaultProcessor):
         self._write(context, out)
         context.run_state.output_path = str(out)
         self._check_product(out)
-        logger.info(f"LinceWriteEegLinshuFile exported .ls: {out}")
+        logger.info(f"LinceWriteIeegLinshuFile exported .ls: {out}")
         return context
 
     def _normalize_trials(self, context: LinxiContext) -> None:
@@ -110,12 +110,12 @@ class LinceWriteEegLinshuFile(DefaultProcessor):
         for message in lossy_policy_messages(dropped, relocated):
             if self._on_lossy == "fail":
                 raise LinceExportError(message)
-            logger.warning(f"LinceWriteEegLinshuFile[lossy=warn] {message}")
+            logger.warning(f"LinceWriteIeegLinshuFile[lossy=warn] {message}")
         if changed:
             intervals = TimeIntervals(name=trials.name, description=trials.description,
                                       table=xr.Dataset(new_vars, attrs=trials.table.attrs))
             context.trials = intervals
-            context.eeg[self.recording_key].events = intervals
+            context.ieeg[self.recording_key].events = intervals
 
     def _write(self, context: LinxiContext, out: Path) -> None:
         out.parent.mkdir(parents=True, exist_ok=True)

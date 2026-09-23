@@ -71,7 +71,7 @@ def _parity(store: Path, sidecar: dict[str, Any], golden: dict[str, tuple[int, i
     lines: list[str] = []
     ok: list[bool] = []
     back = LinxiContext.from_zarr(str(store))
-    slot = back.eeg["query"]
+    slot = back.ieeg["query"]
     table = slot.events.table
     ids = [str(s) for s in table["sample_id"].values]
     pred = np.asarray(table["pred_label"].values)
