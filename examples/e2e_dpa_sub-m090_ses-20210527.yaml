@@ -1,4 +1,4 @@
-# 临策·记忆状态跨个体跨天解码 — DPA m090 评测 session 端到端最小链路为 双载入 → 基线推理 → LinshuFile 导出 → 评测侧车导出。
+# 临策·记忆状态跨个体跨天解码 — DPA m090 评测 session 端到端最小链路为 双载入 → 基线推理 → LinshuFile 导出 → 评测结果文件导出。
 # 本链处理的 session：challenge3 / sub-m090_ses-20210527，为评测日。
 # 双输入：support = eval-2 共 288 trial 无标签，query = eval-1 共 32 trial 带标签，最后载入，context.session 为 eval-1 文件主干。
 # 链上推理 method=baseline：challenge3 跨个体基线，对应方法配置 identity/pooled_cvC。

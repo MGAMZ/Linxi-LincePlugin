@@ -45,7 +45,7 @@ steps:
     params:
       output_path: "__OUTPUT_ROOT__/MA-CO-20231227-01.ls"
       ecephys_key: "query"
-      # 本链 trials 表只含结构列，预测写入 query 记录的 auxiliary_channels，评分写入评测侧车，因此 require_eval_cols 设为 false
+      # 本链 trials 表只含结构列，预测写入 query 记录的 auxiliary_channels，评分写入评测结果文件，因此 require_eval_cols 设为 false
       session_scalar_cols: []
       require_eval_cols: false
       on_lossy: "warn"

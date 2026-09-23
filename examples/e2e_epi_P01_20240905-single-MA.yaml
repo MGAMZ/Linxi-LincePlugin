@@ -1,4 +1,4 @@
-# 临策·基于人类硬膜外脑电的运动解码 — NEO heldin 单动作 session 端到端最小链路为 载入 → 评测窗口 → baseline 推理 → LinshuFile 导出 → 评测侧车导出。
+# 临策·基于人类硬膜外脑电的运动解码 — NEO heldin 单动作 session 端到端最小链路为 载入 → 评测窗口 → baseline 推理 → LinshuFile 导出 → 评测结果文件导出。
 # 固定测试 session：P01_20240905-single-MA，评测日 2024-09-05。
 # 训练集 = train_root 下全部 heldin session，对 query 窗口输出 0–7 预测列。
 # 逐样本比较的参考基准 = 赛道仓库 output/csv/heldin_predictions.csv，即官方 model.pkl 逐窗口推理标签。

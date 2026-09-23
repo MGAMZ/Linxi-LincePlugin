@@ -1,6 +1,6 @@
 # Linxi-LincePlugin
 
-临策算法竞赛的临析引擎插件仓库，为手写运动跨天解码、记忆状态跨个体跨天解码、硬膜外运动解码三条赛道提供数据载入、baseline 解码与漂移指标算子，并提供跨赛道共用的 LinshuFile 导出与评测侧车导出算子。一条 pipeline YAML 即可处理原始数据，输出 `.ls` 数据文件与同级的评测侧车 JSON。
+临策算法竞赛的临析引擎插件仓库，为手写运动跨天解码、记忆状态跨个体跨天解码、硬膜外运动解码三条赛道提供数据载入、baseline 解码与漂移指标算子，并提供跨赛道共用的 LinshuFile 导出与评测结果文件导出算子。一条 pipeline YAML 即可处理原始数据，输出 `.ls` 数据文件与同级的 `<数据文件名>.eval.json` 评测结果文件。
 
 ## 安装
 
@@ -21,7 +21,7 @@ pip install -e ".[gru]"
 
 ## 快速开始
 
-仓库根目录执行驱动脚本。脚本把链配置里的路径占位符替换为命令行传入的根目录后运行，产物为 `.ls` 数据文件与同级 `<数据文件名>.eval.json` 评测侧车。给出 `--golden` 时与官方基准逐字段比较并打印 `PARITY PASS/FAIL`。
+仓库根目录执行驱动脚本。脚本把链配置里的路径占位符替换为命令行传入的根目录后运行，产物为 `.ls` 数据文件与同级的评测结果文件。给出 `--golden` 时与官方基准逐字段比较并打印 `PARITY PASS/FAIL`。
 
 运动赛道：
 
@@ -50,7 +50,7 @@ python examples/run_e2e_dpa.py --chain m090eval \
   --selection <赛道仓库 output/csv/method_selection.json>
 ```
 
-硬膜外赛道。使用 heldin 训练集，链路为载入 → 评测窗口 → baseline 解码 → 导出 `.ls` → 导出评测侧车，`--chain both` 同时运行单动作与组合动作两条流水线：
+硬膜外赛道。使用 heldin 训练集，链路为载入 → 评测窗口 → baseline 解码 → 导出 `.ls` → 导出评测结果文件，`--chain both` 同时运行单动作与组合动作两条流水线：
 
 ```bash
 python examples/run_e2e_epi.py --chain both \

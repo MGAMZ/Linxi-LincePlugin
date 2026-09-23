@@ -156,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
     store, sidecar = _run_chain(config_path, roots, work_dir)
     print(f"[e2e] chain: {args.chain}")
     print(f"[e2e] store: {store}")
-    print(f"[e2e] eval_sidecar: {store.with_name(store.stem + '.eval.json')}")
+    print(f"[e2e] 评测结果文件: {store.with_name(store.stem + '.eval.json')}")
     print(f"[e2e] metrics_row: {json.dumps(sidecar['metrics'], ensure_ascii=False)}")
 
     if args.golden is None:

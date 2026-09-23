@@ -1,4 +1,4 @@
-"""临策赛道评测侧车导出算子。"""
+"""临策赛道评测结果文件导出算子。"""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def strictify(value: Any, path: str = "$", conversions: list[str] | None = None)
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.EXPORT)
 class ExportEvalMetrics(DefaultProcessor):
-    """把 `context.metrics` 全部键写出为 `.ls` store 同级的 eval JSON 侧车。
+    """把 `context.metrics` 全部键写出为与 `.ls` store 同级的评测结果文件。
 
     须在写出 `.ls` 的导出算子之后同段执行。
 
@@ -63,7 +63,7 @@ class ExportEvalMetrics(DefaultProcessor):
         raw = context.run_state.output_path
         if raw is None:
             raise LinceExportError(
-                "context.run_state.output_path 为 None：无法从 .ls 产物路径派生侧车命名根，"
+                "context.run_state.output_path 为 None：无法从 .ls 产物路径派生评测结果文件名，"
                 "请确认同段已有 WriteLinshuFile 系算子写出成功"
             )
         store = Path(raw)
@@ -78,5 +78,5 @@ class ExportEvalMetrics(DefaultProcessor):
         sidecar.parent.mkdir(parents=True, exist_ok=True)
         with sidecar.open("w", encoding="utf-8") as fh:
             json.dump(payload, fh, ensure_ascii=False, allow_nan=False)
-        logger.info(f"[ExportEvalMetrics] eval sidecar 写出: {sidecar}")
+        logger.info(f"[ExportEvalMetrics] 评测结果文件写出: {sidecar}")
         return context

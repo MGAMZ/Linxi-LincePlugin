@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         **eval_doc["metrics"],
     }
     print(f"[e2e] store: {store}")
-    print(f"[e2e] eval_sidecar: {store.with_name(store.stem + '.eval.json')}")
+    print(f"[e2e] 评测结果文件: {store.with_name(store.stem + '.eval.json')}")
     print(f"[e2e] session_score_row: {json.dumps(row, ensure_ascii=False)}")
     print(f"[e2e] drift_targets: {json.dumps(eval_doc['drift_targets'], ensure_ascii=False)}")
 

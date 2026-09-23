@@ -92,7 +92,7 @@ def _parity(store: Path, sidecar: dict[str, Any], golden: dict[str, tuple[int, i
     recomputed = _macro_f1(labels, pred, classes)
     delta = abs(sidecar["metrics"]["macro_f1"] - recomputed)
     ok.append(delta <= MACRO_TOLERANCE)
-    lines.append(f"  侧车 macro_f1={sidecar['metrics']['macro_f1']!r} 重算={recomputed!r} |Δ|={delta:.3e}")
+    lines.append(f"  评测结果文件 macro_f1={sidecar['metrics']['macro_f1']!r} 重算={recomputed!r} |Δ|={delta:.3e}")
 
     sig = slot.electrophysiology.data.values
     ok.append(sig.shape[1] == 8 and float(slot.sampling_frequency) == 1000.0)
