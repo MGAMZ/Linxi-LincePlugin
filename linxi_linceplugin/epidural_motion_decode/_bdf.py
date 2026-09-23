@@ -1,7 +1,4 @@
-"""NEO 赛题 BDF 三件套（data.bdf / evt.bdf / recordInformation.json）读取与试次表构建。
-
-发布文件的头部不符合 EDF+/BDF+ 规范（保留区位移），严格校验打不开时改读内存修复副本；试次表由成对的开始/结束 trigger 构建，Trigger 编码按范式（single / dual）区分语义。
-"""
+"""NEO 赛题 BDF 三件套读取与试次表构建。"""
 
 from __future__ import annotations
 
@@ -29,7 +26,7 @@ TRIGGER_TO_LABEL = {
 
 @dataclass(frozen=True, slots=True)
 class EpiSessionArrays:
-    """单个 NEO session 目录的只读物化结果。"""
+    """单个 NEO session 的载入结果，信号单位为伏特。"""
 
     signal: np.ndarray
     channel_labels: tuple[str, ...]
@@ -50,7 +47,7 @@ def _sanitize_bdf_header(header: bytes) -> bytes:
 
 
 def _open_reader(path: str | Path) -> tuple[pyedflib.EdfReader, str | None]:
-    """返回 (reader, 临时副本路径)：规范合规文件直开，否则打开头部修复副本。"""
+    """打开 BDF 读取器，第二返回值为头部修复临时副本路径，调用方负责删除，直开成功时为 None。"""
     path = str(path)
     try:
         return pyedflib.EdfReader(path), None
@@ -99,7 +96,7 @@ def _read_event_samples(path: str | Path, begin_ms: float, rate: float) -> tuple
 
 def build_trials(start_samples: np.ndarray, codes: np.ndarray, paradigm: str,
                  sampling_frequency: float) -> pd.DataFrame:
-    """成对 trigger（开始码 c、结束码 c+1，按时间序对齐）构建试次表，标签按范式编码。"""
+    """由成对的起止 trigger 构建试次表。"""
     mapping = TRIGGER_TO_LABEL[paradigm]
     rows: list[dict[str, object]] = []
     for start_code in _START_CODES:
@@ -125,7 +122,7 @@ def build_trials(start_samples: np.ndarray, codes: np.ndarray, paradigm: str,
 
 
 def read_epi_session(session_dir: str | Path) -> EpiSessionArrays:
-    """物化一个 session 目录：信号 (T, C) 伏特、通道标签、采样率与试次表。"""
+    """读取单个 NEO session 目录的三件套并返回载入结果。"""
     session_dir = Path(session_dir)
     name = session_dir.name
     if name.endswith("-single-MA"):

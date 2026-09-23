@@ -1,4 +1,4 @@
-"""赛道 baseline 解码协议引擎：以预置权重执行 adapt/predict 与逐 session 评分。"""
+"""赛道 baseline 解码协议引擎。"""
 
 from __future__ import annotations
 

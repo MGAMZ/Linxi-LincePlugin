@@ -1,7 +1,4 @@
-"""赛题 NWB 到临析内部表示的载入算子（LOAD 阶段）：读取发放矩阵、光标信号与试次表。
-
-query 侧计数矩阵与行为序列写入根容器 `binned_spikes` / `behavior_recording`，support 侧整体写入 `context.ecephys[recording_key]`，session 标识由 NWB 相对 `data_root` 的路径派生。
-"""
+"""读取赛题 NWB 至临析内部表示的载入算子"""
 
 from __future__ import annotations
 
@@ -24,7 +21,7 @@ if TYPE_CHECKING:
 
 _SPIKE_COUNTS_UNIT = "spike counts"
 _SESSION_TIME_REFERENCE = "session_start_epoch"
-# (acquisition 名, x/y 分量后缀, 是否行为序列)；键名 = 名_后缀（无后缀时即名）。
+# 元素依次为 acquisition 名、分量轴后缀、是否行为序列。
 _AUXILIARY_SOURCES: tuple[tuple[str, tuple[str, ...], bool], ...] = (
     ("cursor_vel", ("x", "y"), True),
     ("cursor_pos", ("x", "y"), True),
@@ -43,7 +40,7 @@ _BEHAVIOR_KEYS = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class LinceSessionArrays:
-    """单个赛题 NWB 的只读物化结果，全部数值已脱离 HDF5 句柄。"""
+    """单个赛题 NWB 的只读物化结果。"""
 
     neural: np.ndarray
     timestamps: np.ndarray
@@ -72,7 +69,7 @@ def _read_time_series(series: object, label: str, path: Path) -> tuple[np.ndarra
 
 
 def read_lince_nwb(nwb_path: str | Path) -> LinceSessionArrays:
-    """与平台 loader 同一口径，只读物化一个赛题 session。"""
+    """只读物化一个赛题 session 的 NWB 数据。"""
     path = Path(nwb_path)
     if not path.is_file():
         raise FileNotFoundError(f"Lince session NWB file not found: {path}")
@@ -136,9 +133,9 @@ def read_lince_nwb(nwb_path: str | Path) -> LinceSessionArrays:
 
 
 def estimate_bin_rate(timestamps: np.ndarray) -> float:
-    """从相邻 bin 间隔的众数估计名义采样率（trial 内 20 ms → 50 Hz）。
+    """从相邻 bin 间隔的众数估计名义采样率。
 
-    绝对时间戳在 trial 边界存在 ~1.7 s 间隙，不能用首尾跨度均摊估计。
+    时间戳在 trial 边界存在约 1.7 s 间隙，不能按首尾跨度均摊估计。
     """
     if len(timestamps) < 2:
         raise ValueError(f"Cannot estimate bin rate from {len(timestamps)} timestamps")
@@ -151,7 +148,7 @@ def estimate_bin_rate(timestamps: np.ndarray) -> float:
 
 
 def project_bins_to_trials(timestamps: np.ndarray, trials: "pd.DataFrame") -> np.ndarray:
-    """bin→trial 投影，与平台 loader 逐位同语义：闭区间、按表序覆盖、表外为 -1。"""
+    """bin→trial 投影。"""
     trial_ids = np.full(len(timestamps), -1, dtype=np.int64)
     for row in trials.itertuples(index=False):
         mask = (timestamps >= row.start_time) & (timestamps <= row.stop_time)
@@ -160,7 +157,7 @@ def project_bins_to_trials(timestamps: np.ndarray, trials: "pd.DataFrame") -> np
 
 
 def session_counts_matrix(context: Any, side: str) -> xr.DataArray:
-    """计数矩阵 (time, channel)：query 侧取根容器 `binned_spikes`，support 侧取记录的 `electrophysiology` 信号。"""
+    """取指定数据侧的计数矩阵，形状 (time, channel)。"""
     if side == "query":
         spikes = context.binned_spikes
         if spikes is None:
@@ -173,7 +170,7 @@ def session_counts_matrix(context: Any, side: str) -> xr.DataArray:
 
 
 def session_axis(context: Any, side: str) -> np.ndarray:
-    """计数行时间的权威轴（秒）：query 侧为 `BinnedSpikes.time`，support 侧为记录主信号的时间轴。"""
+    """取计数行时间的权威时间轴，单位秒。"""
     matrix_source: Any = context.binned_spikes if side == "query" else context.ecephys[side].electrophysiology
     if matrix_source is None:
         raise ValueError(f"{side!r} 侧计数时间轴不可得：对应容器尚未产出")
@@ -182,7 +179,7 @@ def session_axis(context: Any, side: str) -> np.ndarray:
 
 
 def session_behavior(context: Any, side: str) -> dict[str, TimeSeries]:
-    """行为序列（光标速度与位置）：query 侧取根容器 `behavior_recording`，support 侧取记录的 `auxiliary_channels`。"""
+    """取指定数据侧的行为序列，即光标速度与位置。"""
     if side == "query":
         behavior = context.behavior_recording
         if not behavior:
@@ -192,10 +189,7 @@ def session_behavior(context: Any, side: str) -> dict[str, TimeSeries]:
 
 
 def _binned_spikes_container(arrays: LinceSessionArrays, channel_ids: np.ndarray, rate: float) -> BinnedSpikes:
-    """构建 query 侧计数矩阵的根容器 `binned_spikes`。
-
-    行时间为源数据的真实时间戳，试次间隙体现为相邻 bin 间距增大；名义分箱宽度由 `bin_sec` 承载，`source_pipeline` 与 `source_recording_ref` 记录产出管线与源记录标识。
-    """
+    """构建 query 侧计数矩阵根容器 `binned_spikes`。"""
     spec = make_time_axis(arrays.timestamps, n_rows=int(arrays.neural.shape[0]), nominal_rate=rate)
     time = spec.timestamps if spec.timestamps is not None else np.asarray(arrays.timestamps, dtype=np.float64)
     bin_sec = 1.0 / rate
@@ -223,17 +217,7 @@ def _session_label(path: Path, data_root: str) -> str:
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.LOAD)
 class LoadLinceSession(DefaultProcessor):
-    """把一个赛题 session 的 NWB 投影进临析内部表示的 LOAD 算子。
-
-    Parameters
-    ----------
-    input_path:
-        session NWB 文件路径。必须显式传入；本算子刻意不消费 ``run_state.input_path``，以免多 load 步骤相互污染。
-    recording_key:
-        写入 `context.ecephys` 的键。query = 评测侧（计数矩阵与行为序列写入根容器 `binned_spikes` / `behavior_recording`，同时填 `context.recording` 与顶层 `context.trials`）；support = 校准侧（整体只写入该键）。
-    data_root:
-        数据根，用于派生 session 标识。必须显式传入；本仓库不内置任何机器本地数据根默认值。
-    """
+    """把一个赛题 session 的 NWB 投影进临析内部表示的 LOAD 算子。"""
 
     def __init__(
         self,

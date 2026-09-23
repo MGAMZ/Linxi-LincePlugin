@@ -1,4 +1,4 @@
-"""跨天漂移指标纯计算内核：输入逐 session 的 (T, C) 发放矩阵，输出漂移指标与聚合结果。"""
+"""跨天漂移指标纯计算内核。"""
 
 from __future__ import annotations
 
@@ -26,15 +26,15 @@ __all__ = [
 
 DEFAULT_DATE_PATTERN = r"MA-[A-Z]{2}-(\d{8})-\d{2}"
 DATE_RE = re.compile(DEFAULT_DATE_PATTERN)
-TRAIN_LEVEL = "train"  # public heldin 以 level="train" 入册
+TRAIN_LEVEL = "train"
 HOLDOUT_LEVELS = ("easy", "normal", "hard")
-AGG_LEVEL = "hard"  # 批次聚合与 pearson 取样针对的评测层
+AGG_LEVEL = "hard"
 
 _NAN = float("nan")
 
 
 def cosine(a: np.ndarray, b: np.ndarray) -> float:
-    """余弦相似度；任一向量零范数返回 NaN。"""
+    """余弦相似度。"""
     na = float(np.linalg.norm(a))
     nb = float(np.linalg.norm(b))
     if na == 0.0 or nb == 0.0:
@@ -43,7 +43,7 @@ def cosine(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def pearson(x: Sequence[float], y: Sequence[float]) -> float:
-    """皮尔逊相关系数；n<2 或常数序列返回 NaN。"""
+    """皮尔逊相关系数。"""
     xs = np.asarray(x, dtype=np.float64)
     ys = np.asarray(y, dtype=np.float64)
     if xs.size < 2:
@@ -57,7 +57,7 @@ def pearson(x: Sequence[float], y: Sequence[float]) -> float:
 
 
 def parse_session_date(session_key: str, date_pattern: str = DEFAULT_DATE_PATTERN) -> date:
-    """从 session 目录名解析日期；正则首个捕获组为 8 位日期串，不匹配即 ValueError。"""
+    """从 session 目录名解析日期。"""
     regex = DATE_RE if date_pattern == DEFAULT_DATE_PATTERN else re.compile(date_pattern)
     match = regex.search(session_key)
     if match is None:
@@ -67,7 +67,7 @@ def parse_session_date(session_key: str, date_pattern: str = DEFAULT_DATE_PATTER
 
 
 def session_fr(x: np.ndarray) -> np.ndarray:
-    """通道发放率向量：X 沿时间维取均值。"""
+    """通道发放率向量。"""
     arr = np.asarray(x)
     if arr.ndim != 2:
         raise ValueError(f"drift input X must be 2-D (T, C), got shape {arr.shape}")
@@ -77,13 +77,13 @@ def session_fr(x: np.ndarray) -> np.ndarray:
 
 
 def centroid_from_frs(frs: Sequence[np.ndarray]) -> np.ndarray:
-    """任务质心 = train 会话 fr 按通道逐维均值。"""
+    """发放率质心。"""
     return np.mean(np.vstack(list(frs)), axis=0)
 
 
 @dataclass(frozen=True, slots=True)
 class DriftSessionInput:
-    """一个 session 的漂移计算输入：原始 (T, C) 发放矩阵 + 目录名派生的分级元信息。"""
+    """一个 session 的漂移计算输入。"""
 
     task: str
     level: str
@@ -94,7 +94,7 @@ class DriftSessionInput:
 
 @dataclass(frozen=True, slots=True)
 class DriftVocabulary:
-    """会话分级词表：日期正则（首捕获组 8 位日期）与 train/holdout/聚合层名，默认值 = 运动赛道数据口径。"""
+    """会话分级词表。"""
 
     date_pattern: str = DEFAULT_DATE_PATTERN
     train_level: str = TRAIN_LEVEL
@@ -104,7 +104,7 @@ class DriftVocabulary:
 
 @dataclass(frozen=True, slots=True)
 class DriftSessionMetrics:
-    """逐 session 漂移画像。"""
+    """单个 session 的漂移指标。"""
 
     task: str
     level: str
@@ -122,20 +122,19 @@ class DriftSessionMetrics:
 
 @dataclass(frozen=True, slots=True)
 class DriftAnalysisResult:
-    """批次结果：逐 session 表 + 质心 + hard 级 12-session 均值聚合。"""
+    """批次漂移结果。"""
 
     sessions: tuple[DriftSessionMetrics, ...]
     centroids: dict[str, np.ndarray]
     cos_raw_mean_hard: float
-    one_minus_cos_raw_mean_hard: float  # 去增益残差
+    one_minus_cos_raw_mean_hard: float
     cos_centered_mean_hard: float
     norm_ratio_mean_hard: float
-    norm_ratio_dev_hard: float  # |mean(norm_ratio_hard)-1|
-    pearson_gap_cos: float  # query 全体 gap_days×cos_raw 相关
+    norm_ratio_dev_hard: float
+    pearson_gap_cos: float
 
 
 def _gmean(rows: Sequence[DriftSessionMetrics], attr: str) -> float:
-    """NaN 先滤、均值后出；空集 NaN。"""
     vals = [getattr(r, attr) for r in rows if np.isfinite(getattr(r, attr))]
     return float(np.mean(vals)) if vals else _NAN
 
@@ -144,10 +143,7 @@ def compute_drift_metrics(
     inputs: Sequence[DriftSessionInput],
     vocabulary: DriftVocabulary = DriftVocabulary(),
 ) -> DriftAnalysisResult:
-    """计算全套漂移指标：发放率 → 质心 → 逐 session 指标 → 聚合层均值。
-
-    `vocabulary` 提供 train/holdout/聚合层名与日期正则，默认值 = 运动赛道口径。
-    """
+    """计算全套跨天漂移指标与批次聚合。"""
     tasks = sorted({i.task for i in inputs})
 
     frs: list[np.ndarray] = [session_fr(i.x) for i in inputs]
@@ -159,7 +155,7 @@ def compute_drift_metrics(
         train_frs = [f for f, i in zip(frs, inputs) if i.task == task and i.level == vocabulary.train_level]
         if not train_frs:
             logger.warning(
-                f"[drift] task {task!r} 无 level={vocabulary.train_level!r} 会话，质心不可得；该任务余弦类指标置 NaN"
+                f"[drift] task {task!r} 无 level={vocabulary.train_level!r} 会话，质心不可得，该任务余弦类指标置 NaN"
             )
             continue
         centroids[task] = centroid_from_frs(train_frs)
@@ -185,13 +181,12 @@ def compute_drift_metrics(
             )
         )
 
-    # gap×cos 相关：全体 heldout session，cos_raw 非有限的与对应 gap 同序成对剔除
     heldout = [m for m in sessions if m.level in vocabulary.holdout_levels]
     cos_list = [m.cos_raw for m in heldout if np.isfinite(m.cos_raw)]
     gap_for_cos = [m.gap_days for m in heldout if np.isfinite(m.cos_raw)]
     pearson_gap_cos = pearson(gap_for_cos, cos_list)
 
-    agg = [m for m in sessions if m.level == vocabulary.agg_level]  # 跨任务合并的聚合层均值
+    agg = [m for m in sessions if m.level == vocabulary.agg_level]
     cos_raw_mean_hard = _gmean(agg, "cos_raw")
     norm_ratio_mean_hard = _gmean(agg, "norm_ratio")
     return DriftAnalysisResult(

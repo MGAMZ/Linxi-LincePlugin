@@ -1,7 +1,4 @@
-"""DPA 赛道 baseline 分类解码推理算子（POSTPROCESS 阶段）：经 `track_root` 指针装载的赛道模块执行 baseline 管线与参考评分，插件零数值路径复刻。
-
-逐 trial 预测 `mem_pred_lbl` / `corr_pred_lbl` 挂入 query 侧试次表，评测载荷写入 `context.metrics` 暂存袋，由 `ExportEvalMetrics` 袋透传写出 eval JSON 侧车。
-"""
+"""DPA 赛道 baseline 分类解码的 POSTPROCESS 阶段算子。"""
 
 from __future__ import annotations
 
@@ -38,7 +35,7 @@ _TRACK_SOURCE_DIRS = ("lince_memory", "scripts")
 
 @dataclass(frozen=True, slots=True)
 class TrackPipeline:
-    """赛道评测管线的运行时指针（经 `load_track_pipeline` 自 `track_root` 装载）。"""
+    """赛道仓库管线与评分模块的运行时指针。"""
 
     train_matrix: Callable[[list[Path]], tuple[np.ndarray, np.ndarray, np.ndarray, list[dict[str, Any]]]]
     fit_cv: Callable[[np.ndarray, np.ndarray], tuple[Any, dict[str, Any]]]
@@ -53,12 +50,12 @@ class TrackPipeline:
 
 
 def load_track_pipeline(track_root: str) -> TrackPipeline:
-    """把赛道仓库根挂上 `sys.path` 并装载评分与代理评测模块，返回管线指针。"""
+    """装载赛道仓库的数值管线与评分模块。"""
     root = Path(track_root)
     absent = [rel for rel in ("paths.py", "lince_memory", "scripts") if not (root / rel).exists()]
     if absent:
         raise FileNotFoundError(
-            f"track_root {root} 缺赛道仓库组件 {absent}（须指向记忆状态跨个体跨天解码仓库根目录）"
+            f"track_root {root} 缺赛道仓库组件 {absent}，须指向记忆状态跨个体跨天解码仓库根目录"
         )
     for entry in (str(root.resolve()), str((root / "scripts").resolve())):
         if entry not in sys.path:
@@ -85,7 +82,7 @@ def load_track_pipeline(track_root: str) -> TrackPipeline:
 
 
 def track_source_manifest(track_root: str) -> dict[str, str]:
-    """赛道数值路径源文件（paths.py 与 lince_memory/、scripts/ 全部 .py）的 sha256 清单。"""
+    """DPA 赛道仓库源文件的 sha256 清单。"""
     root = Path(track_root)
     files = [root / "paths.py", *(p for d in _TRACK_SOURCE_DIRS for p in sorted((root / d).glob("*.py")))]
     return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
@@ -93,7 +90,7 @@ def track_source_manifest(track_root: str) -> dict[str, str]:
 
 @dataclass(frozen=True, slots=True)
 class InferOutcome:
-    """单评测文件的推理结局：逐 trial 预测两列 + 侧车 `metrics` 载荷行 + 可选侧车顶层扩展键。"""
+    """单个评测文件的推理结果。"""
 
     mem_pred: np.ndarray
     corr_pred: np.ndarray
@@ -102,7 +99,7 @@ class InferOutcome:
 
 
 def _run_c3_baseline(track: TrackPipeline, eval_file: Path, source_check: Callable[[], None]) -> InferOutcome:
-    """恒等 region 池化跨个体管线：challenge3 全部 train 拼接训练、五折 CV 选 C、全训练集重训、对评测文件产预测并按赛道评分器打分。"""
+    """challenge3 跨个体基线实现。"""
     train_files = sorted((track.data_root / "challenge3").glob(_TRAIN_GLOB))
     if len(train_files) != _TRAIN_FILE_COUNT:
         raise FileNotFoundError(
@@ -138,14 +135,7 @@ def _run_c3_baseline(track: TrackPipeline, eval_file: Path, source_check: Callab
 
 
 def _run_c1_baseline(track: TrackPipeline, eval_file: Path, source_check: Callable[[], None]) -> InferOutcome:
-    """c1 同天教程基线：unit_space 均衡下采样特征上五折 CV（`repro_baseline_c1.cv_grid` 口径）产 CV 指标。
-
-    `mem_acc` / `corr_acc` 为逐标签 best-C CV 均值（教程基线的 accuracy 载体），
-    `session_score` 按赛题 readme 线性组合；逐 trial 预测列经 `make_submissions.c1_submission`
-    （final model 口径单一来源 `baseline_c1_cv.json` 的 best_C）对同一文件全部 trial 样本内预测，
-    按 trial_indices 反置换回文件序。CV 明细（best C、网格逐行、种子、样本数）以
-    `lince_dpa_c1_cv` 顶层键入侧车。
-    """
+    """challenge1 同天解码基线实现。"""
     subject, session_date, role = parse_session_name(eval_file)
     if role != "train":
         raise ValueError(f"c1 同天基线要求带标签 train 帧，实际 role={role!r}：{eval_file}")
@@ -187,7 +177,7 @@ def _run_c1_baseline(track: TrackPipeline, eval_file: Path, source_check: Callab
 
 
 def _run_baseline(track: TrackPipeline, eval_file: Path, source_check: Callable[[], None]) -> InferOutcome:
-    """baseline 通道按评测文件所在子挑战目录路由（challenge1 同天 CV / challenge3 恒等跨个体）。"""
+    """baseline 管线按评测文件所在子挑战目录路由。"""
     match eval_file.parent.name:
         case "challenge1":
             return _run_c1_baseline(track, eval_file, source_check)
@@ -204,30 +194,9 @@ _METHODS: dict[str, Callable[[TrackPipeline, Path, Callable[[], None]], InferOut
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.POSTPROCESS)
 class DpaBaselineInfer(DefaultProcessor):
-    """对 DPA 评测文件执行赛道 baseline（或后续选型方法）分类解码的 POSTPROCESS 算子。
+    """对 DPA 评测文件执行赛道 baseline 分类解码。"""
 
-    Example YAML configuration::
-
-        - stage: postprocess
-          processor_name: "DpaBaselineInfer"
-          params:
-            track_root: "/path/to/lince-memory-track-repo"
-            eval_path: "/path/to/sub-m090_ses-20210527_task-DPA-eval-1.nwb"
-            method: "baseline"
-
-    Parameters
-    ----------
-    track_root : str
-        赛道仓库根目录（含 `lince_memory/`、`scripts/`、`paths.py`），必填。
-    eval_path : str
-        评测 NWB 路径，必填；须与上游载入的 `context.session` 命名主干一致。
-    method : str
-        方法配置名，当前可选 `baseline`；未知名 Fast Fail。
-    name : str | None
-        处理器实例名（引擎惯例）。
-    """
-
-    PROCESSOR_NAME = "DpaBaselineInfer"  # 显式声明注册名，稳定 YAML 契约
+    PROCESSOR_NAME = "DpaBaselineInfer"
 
     def __init__(
         self,

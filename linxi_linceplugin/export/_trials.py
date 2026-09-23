@@ -1,4 +1,4 @@
-"""trials 表的 LinshuFile 表达性归一（各赛道导出接线共用）：object 列分类、补齐与有损清单产出。"""
+"""trials 表的 LinshuFile 表达性归一。"""
 from __future__ import annotations
 
 import numpy as np
@@ -10,11 +10,11 @@ _NUMERIC_KINDS = frozenset("biuf")
 
 
 class LinceExportError(RuntimeError):
-    """导出接线的前置条件或产物断言失败。"""
+    """导出前置条件或产物校验失败。"""
 
 
 def _classify_object_column(arr: np.ndarray) -> str:
-    """把 object dtype 列分为 ``str``（原样保留）/ ``ragged``（补齐）/ ``keep`` / ``opaque``（不可表达）。"""
+    """把 object dtype 列分为 `str` / `ragged` / `keep` / `opaque`。"""
     if arr.size == 0:
         return "keep"
     items = list(arr)
@@ -30,7 +30,7 @@ def _classify_object_column(arr: np.ndarray) -> str:
 
 
 def _pad_ragged(name: str, col: np.ndarray, primary: str) -> tuple[xr.DataArray, xr.DataArray]:
-    """object 列内等宽 1/2 维数值数组补齐为 (primary, len[, width]) 规则数组，并产出有效长度列。"""
+    """把 object 列内长度不齐的数值数组补齐为规则数组并产出有效长度列。"""
     items = [np.asarray(x, dtype=np.float64) for x in col]
     max_len = max(x.shape[0] for x in items)
     if items[0].ndim == 1:
@@ -56,9 +56,9 @@ def normalize_trials(
     session_cols: list[str],
     require_eval: bool,
 ) -> tuple[dict[str, xr.DataArray], bool, list[str], list[str]]:
-    """把 trials 表规整为可序列化变量集：维度与列校验、object 列补齐、session 级标量列核验。
+    """把 trials 表规整为可序列化变量集。
 
-    返回 (新变量集, 是否发生改动, 丢弃列清单, 挪位保留列清单)；校验失败抛 `LinceExportError`，有损策略由调用方执行。
+    返回新变量集、是否发生改动、丢弃列清单与挪位保留列清单。
     """
     start = table["start_time"]
     if start.ndim != 1:
@@ -67,11 +67,11 @@ def normalize_trials(
     n = int(start.sizes[primary])
 
     if require_eval and not set(table.data_vars) - structural:
-        raise LinceExportError("trials 表仅含结构列，未合入任何解码评测列（require_eval_cols=False 可放开）")
+        raise LinceExportError("trials 表仅含结构列，未合入任何解码评测列，置 require_eval_cols=False 可放开")
 
     for col in session_cols:
         if col not in table.data_vars:
-            raise LinceExportError(f"session_scalar_cols 引用不存在的列 {col!r}（现有列={sorted(table.data_vars)}）")
+            raise LinceExportError(f"session_scalar_cols 引用不存在的列 {col!r}，现有列为 {sorted(table.data_vars)}")
         vals = np.asarray(table[col].values)
         if vals.ndim != 1 or vals.size != n:
             raise LinceExportError(f"session 级标量列 {col!r} 必须是长度 {n} 的一维广播列，实际 shape={vals.shape}")
@@ -104,13 +104,13 @@ def normalize_trials(
 
 
 def lossy_policy_messages(dropped: list[str], relocated: list[str]) -> list[str]:
-    """有损操作（丢弃 / 挪位）的结构化告警文案。"""
+    """有损操作的结构化告警文案。"""
     messages: list[str] = []
     if dropped:
         messages.append(
             "dropped 无法用 LinshuFile 表达的字段"
-            f"（对象列元素非字符串/非一致形状数值数组）: {sorted(dropped)}"
+            f"，即对象列元素既非字符串也非一致形状数值数组: {sorted(dropped)}"
         )
     if relocated:
-        messages.append(f"relocated session 级标量以 trials 广播列保留（LinshuFile 根级无指标容器）: {', '.join(relocated)}")
+        messages.append(f"relocated session 级标量以 trials 广播列保留，LinshuFile 根级无指标容器: {', '.join(relocated)}")
     return messages

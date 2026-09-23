@@ -1,7 +1,3 @@
-"""临策赛道 LinshuFile 导出接线（EXPORT 阶段）：把流水线中的记录与评测结果写出为 `.ls` 产物。
-
-写出前将 DPA units 的多级 channel 坐标展开为逐 level 列并登记展开清单于根 notes，写出后把 context 恢复为载入态，运动类 context 直通。
-"""
 from __future__ import annotations
 
 import json
@@ -28,33 +24,33 @@ _NOTES_EXPORT_KEY = "lince_dpa_export"
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.EXPORT)
 class LinceWriteLinshuFile(DefaultProcessor):
-    """把解码评测结构接入上游 ``WriteLinshuFile`` 并写出 ``.ls``（Zarr 目录 store）。
+    """把解码评测结构接入上游 `WriteLinshuFile` 并写出 `.ls`。
 
     Example YAML configuration::
 
         - stage: export
           processor_name: "LinceWriteLinshuFile"
           params:
-            output_path: "/path/to/output/linshu_e2e/sub-VM23_ses-MA-CO-20231227-01.ls"
+            output_path: "/path/to/output/MA-CO-20231227-01.ls"
             ecephys_key: "query"
             session_scalar_cols: ["session_r2_mean", "session_score"]
             on_lossy: "warn"
             overwrite: true
 
-    Parameters
-    ----------
-    output_path / overwrite / skip_fields / skip_raw_signals :
-        透传上游 `WriteLinshuFile` 的同名参数，语义与上游一致。
-    ecephys_key : str
-        信号槽键，临策双记录布局默认 ``"query"``。
-    session_scalar_cols : list[str] | None
-        trials 表中按 trial 广播的 session 级标量列名；逐列做常量校验并按有损策略上报。
-    on_lossy : {"warn", "fail"}
-        有损策略：``"warn"`` 挪位保留/丢弃均报结构化 WARNING；``"fail"`` 一律失败。
-    require_eval_cols : bool
-        True 时要求 trials 表存在结构列以外的评测列，防止解码结果缺失时空壳导出。
-    structural_cols : list[str] | None
-        视为非评测的结构列集合，默认 ``start_time``/``stop_time``/``trial_id``。
+    Args
+    ----
+    output_path / overwrite / skip_fields / skip_raw_signals
+        透传上游 `WriteLinshuFile` 的同名参数。
+    ecephys_key
+        导出的 ecephys 记录键。
+    session_scalar_cols
+        trials 表中按 trial 广播的 session 级标量列名。
+    on_lossy
+        有损处理策略，取 `warn` 或 `fail`。
+    require_eval_cols
+        为 True 时要求 trials 表含结构列以外的评测列。
+    structural_cols
+        视为非评测的结构列集合。
     """
 
     def __init__(
@@ -139,26 +135,25 @@ class LinceWriteLinshuFile(DefaultProcessor):
     def _check_signal_slots(self, context: LinxiContext) -> None:
         if context.recording is None:
             raise LinceExportError(
-                "context.recording 为 None：上游 WriteLinshuFile 对该情形只告警跳过写出，"
-                "本接线层将其转为失败。请确认 load 算子已构建 recording 槽。"
+                "context.recording 为 None：该情形上游 WriteLinshuFile 仅告警跳过写出，此处按失败处理。"
+                "请确认 load 算子已构建信号记录。"
             )
         slot = context.ecephys.get(self.ecephys_key)
         if slot is None:
             raise LinceExportError(
-                f"context.ecephys 缺信号槽 {self.ecephys_key!r}（writer 只放空占位不放信号内容），"
-                f"现有键={sorted(context.ecephys)}"
+                f"context.ecephys 缺信号槽 {self.ecephys_key!r}，现有键={sorted(context.ecephys)}"
             )
         if slot.electrophysiology is None and not slot.auxiliary_channels:
             raise LinceExportError(
-                f"ecephys[{self.ecephys_key!r}] 为空占位（electrophysiology=None 且 auxiliary_channels 空），"
-                "落盘只会得到 _linshu_type 空壳；信号槽须由 load 算子预填"
+                f"ecephys[{self.ecephys_key!r}] 为空占位，产物将只剩 _linshu_type 类型标记。"
+                "信号槽须由 load 算子预填"
             )
 
     def _normalize_trials(self, context: LinxiContext) -> None:
         trials = context.trials
         if trials is None:
             if self._require_eval_cols:
-                raise LinceExportError("context.trials 为 None：无解码评测试次表可导出；如仅需元数据导出请显式 require_eval_cols=False")
+                raise LinceExportError("context.trials 为 None：无解码评测试次表可导出。如仅需元数据导出请显式 require_eval_cols=False")
             return
 
         new_vars, changed, dropped, relocated = normalize_trials(
@@ -179,7 +174,7 @@ class LinceWriteLinshuFile(DefaultProcessor):
     def _check_product(self, context: LinxiContext) -> None:
         raw = context.run_state.output_path
         if raw is None:
-            raise LinceExportError("上游 WriteLinshuFile 未写出 .ls 产物路径（命中静默跳过路径），按失败处理")
+            raise LinceExportError("上游 WriteLinshuFile 命中静默跳过路径，未写出 .ls 产物路径，按失败处理")
         out = Path(raw)
         if not out.is_dir() or not any((out / m).exists() for m in ("zarr.json", ".zgroup", ".zmetadata")):
             raise LinceExportError(f"导出产物不是带格式标记的 Zarr 目录 store: {out}")

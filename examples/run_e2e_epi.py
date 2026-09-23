@@ -1,7 +1,4 @@
-"""临策 NEO 赛道 e2e 示例驱动：替换 YAML 路径占位符后运行固定的单动作与双动作 session 流水线，逐样本与基线复现 golden 比对。
-
-golden = 赛道仓库 `output/csv/heldin_predictions.csv`（官方 model.pkl 对 heldin 全量窗口的直推标签）。判据：`.ls` 读回的试次表 `pred_label` 与 golden `pred_official` 逐样本一致、eval 侧车 `macro_f1` 与按 golden 重算值一致、信号与窗口形状符合评测契约。
-"""
+"""临策 NEO 赛道 e2e 示例驱动：替换 YAML 路径占位符后运行固定的单动作与双动作 session 流水线，逐样本与基线复现 golden 比对。"""
 from __future__ import annotations
 
 import argparse
@@ -102,13 +99,13 @@ def _parity(store: Path, sidecar: dict[str, Any], golden: dict[str, tuple[int, i
     lines.append(f"  信号形状 {sig.shape} 采样率 {slot.sampling_frequency} 单位 {slot.electrophysiology.unit}")
     window = table["window_signal"].values
     ok.append(window.shape == (len(ids), 2000, 8))
-    lines.append(f"  window_signal 形状 {window.shape}（契约 (N, 2000, 8)，提交端转置为 (N, 8, 2000)）")
+    lines.append(f"  window_signal 形状 {window.shape}，契约为 (N, 2000, 8)，提交端转置为 (N, 8, 2000)")
     return all(ok), lines
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-root", required=True, help="heldin 数据根（含各 session 目录）")
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--data-root", required=True, help="heldin 数据根，含各 session 目录")
     parser.add_argument("--output-root", required=True, help="产物根目录")
     parser.add_argument("--golden", required=True, help="基线复现 golden CSV 路径")
     parser.add_argument("--chain", choices=(*CHAIN_CONFIGS, "both"), default="both")

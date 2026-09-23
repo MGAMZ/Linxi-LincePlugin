@@ -1,7 +1,5 @@
-"""临策赛道评测侧车导出算子（EXPORT 阶段）：把 `context.metrics` 暂存袋序列化为与 `.ls` 产物同目录同命名根的 `<数据文件名>.eval.json`。
+"""临策赛道评测侧车导出算子。"""
 
-序列化政策：NaN 与 ±Inf 一律转换为 null（缺失语义）并打印一条转换路径清单日志；schema 键缺失落 null；非 JSON 原生对象（ndarray 等）即时抛 `TypeError`；写出使用 `json.dump(..., allow_nan=False)`，产物保证为严格 JSON。
-"""
 from __future__ import annotations
 
 import json
@@ -24,7 +22,7 @@ _SIDECAR_SUFFIX = ".eval.json"
 
 
 def strictify(value: Any, path: str = "$", conversions: list[str] | None = None) -> Any:
-    """递归产出 JSON-strict 值：非有限浮点（NaN/±Inf）转 None 并把路径记入 `conversions`；非 JSON 原生类型抛 `TypeError`。"""
+    """递归转换值为 JSON 严格可序列化形态。"""
     if conversions is None:
         conversions = []
     if value is None or isinstance(value, (bool, int, str)):
@@ -39,32 +37,24 @@ def strictify(value: Any, path: str = "$", conversions: list[str] | None = None)
     if isinstance(value, (list, tuple)):
         return [strictify(item, f"{path}[{index}]", conversions) for index, item in enumerate(value)]
     raise TypeError(
-        f"context.metrics 暂存袋含非 JSON 原生对象: {path} 处为 {type(value).__name__}，"
-        "拒绝静默丢键（Fast Fail）"
+        f"context.metrics 含非 JSON 原生对象: {path} 处为 {type(value).__name__}，不静默丢弃"
     )
 
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.EXPORT)
 class ExportEvalMetrics(DefaultProcessor):
-    """把评测暂存袋整袋写出为 `.ls` store 的同级 eval JSON 侧车。
+    """把 `context.metrics` 全部键写出为 `.ls` store 同级的 eval JSON 侧车。
 
-    侧车路径在运行时从上游 `WriteLinshuFile` 写定的 `context.run_state.output_path` 派生：`<store 父目录>/<store 命名根>.eval.json`（如 `MA-CO-20231227-01.ls` → `MA-CO-20231227-01.eval.json`）。本算子须在写出 `.ls` 的导出算子之后同段执行。
-
-    袋内容即侧车结构：解码算子填 `session_id` / `tier` / `span` / `metrics`，漂移算子填 `drift_targets`；schema 之外的袋键一并写出。
+    须在写出 `.ls` 的导出算子之后同段执行。
 
     Example YAML configuration::
 
         - stage: export
           processor_name: "ExportEvalMetrics"
           params: {}
-
-    Parameters
-    ----------
-    name : str | None
-        处理器实例名（引擎惯例）。
     """
 
-    PROCESSOR_NAME = "ExportEvalMetrics"  # 显式声明注册名
+    PROCESSOR_NAME = "ExportEvalMetrics"
 
     def __init__(self, name: str | None = None):
         super().__init__(name)

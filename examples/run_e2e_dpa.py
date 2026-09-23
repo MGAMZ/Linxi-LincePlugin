@@ -1,7 +1,4 @@
-"""临策 DPA e2e 示例驱动：替换 YAML 路径占位符后运行预设链，逐链与 golden 基准比对。
-
-评测读数取自 store 同级 eval JSON 侧车，逐 trial 判据从 `.ls` 的 trials 表读回。
-"""
+"""临策 DPA e2e 示例驱动"""
 from __future__ import annotations
 
 import argparse
@@ -12,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-# 数值口径为引擎标准基线：linxi 先于其余第三方依赖导入，进程以 OpenBLAS 单线程计算。
+# linxi 须先于其余第三方依赖导入，进程以 OpenBLAS 单线程计算，保证数值可重现。
 from linxi.fabric.linxi_context import LinxiContext
 from linxi.fabric.metadata_injection import apply_pipeline_metadata
 from linxi.fabric.task_pipeline import PipelineDefinition
@@ -32,7 +29,7 @@ _PATH_TOKENS = ("__DATA_ROOT__", "__TRACK_ROOT__", "__OUTPUT_ROOT__")
 
 
 def _resolve_config(config_path: Path, roots: dict[str, str], work_dir: Path) -> Path:
-    """把 YAML 占位符替换为命令行根路径，写入工作目录下的临时配置；仓库 YAML 不被改动。"""
+    """把 YAML 占位符替换为命令行根路径，写入工作目录下的临时配置。"""
     text = config_path.read_text(encoding="utf-8")
     for token, root in zip(_PATH_TOKENS, (roots["data"], roots["track"], roots["output"]), strict=True):
         text = text.replace(token, root)
@@ -69,18 +66,18 @@ def _c1_parity(sidecar: dict[str, Any], golden: dict[str, Any]) -> tuple[bool, l
     cv_bag = sidecar["lince_dpa_c1_cv"]
     for tag in TAGS:
         lines.append(_delta_line(f"{tag}_acc", metrics[f"{tag}_acc"], golden[tag]["cv_mean"], ok))
-        lines.append(_delta_line(f"{tag}_cv_std(cv_bag)", cv_bag[tag]["cv_std"], golden[tag]["cv_std"], ok))
+        lines.append(_delta_line(f"{tag}_cv_std CV明细", cv_bag[tag]["cv_std"], golden[tag]["cv_std"], ok))
         for key in ("best_C", "cv_mean"):
             ok.append(cv_bag[tag][key] == golden[tag][key])
-            lines.append(f"  {tag}.{key}(cv_bag): run={cv_bag[tag][key]!r} golden={golden[tag][key]!r}")
+            lines.append(f"  CV明细 {tag}.{key}: run={cv_bag[tag][key]!r} golden={golden[tag][key]!r}")
     for row_run, row_gold in zip(cv_bag["mem"]["cv_grid"], golden["mem"]["cv_grid"], strict=True):
         ok.append(row_run == row_gold)
     recomposed = 0.5 * (golden["mem"]["cv_mean"] + golden["corr"]["cv_mean"])
-    lines.append(_delta_line("session_score(黄金CV重合成)", metrics["session_score"], recomposed, ok))
+    lines.append(_delta_line("session_score 按golden重合成", metrics["session_score"], recomposed, ok))
     for key in ("n_samples", "n_features", "sampling_seed"):
         ok.append(cv_bag[key] == golden[key])
-        lines.append(f"  {key}(cv_bag): run={cv_bag[key]!r} golden={golden[key]!r}")
-    manifest = {"golden_field_source": "baseline_c1_cv.json unit_space CV", "executed_methods": {t: "identity/baseline (c1 同天 CV)" for t in TAGS}, "chain_substitute": {t: "不触发" for t in TAGS}}
+        lines.append(f"  CV明细 {key}: run={cv_bag[key]!r} golden={golden[key]!r}")
+    manifest = {"golden_field_source": "baseline_c1_cv.json unit_space CV", "executed_methods": {t: "identity/baseline 取自 c1 同天 CV" for t in TAGS}, "chain_substitute": {t: "不触发" for t in TAGS}}
     return all(ok), lines, manifest
 
 
@@ -94,13 +91,13 @@ def _executed_configs(selection: dict[str, Any], results: dict[str, Any]) -> tup
             substitute[tag] = "不触发"
             continue
         if cfg != HEAD_REFIT_CFG:
-            raise ValueError(f"{tag} 选定法 {cfg} 非恒等且非 HeadRefit，链上方法通道未接线（gate-fail）")
+            raise ValueError(f"{tag} 选定法 {cfg} 非恒等且非 HeadRefit，选定法无链上解码通道，无法对账")
         means = {c: sum(r["accuracy"] for r in results["rows"] if r["tag"] == tag and r["config"] == c and r["proxy"] in PROXIES) / len(PROXIES) for c in SUBSTITUTE_CANDIDATES}
         winner = max(SUBSTITUTE_CANDIDATES, key=lambda c: means[c])
         executed[tag] = winner
         substitute[tag] = f"HeadRefit→{winner}"
         if winner != IDENTITY_CFG:
-            raise ValueError(f"{tag} 代跑法 {winner} 链上方法通道未接线（gate-fail；chain_substitute={substitute[tag]}）")
+            raise ValueError(f"{tag} 代跑法 {winner} 无链上解码通道，无法对账，chain_substitute 为 {substitute[tag]}")
     return executed, substitute
 
 
@@ -130,23 +127,23 @@ def _m090_parity(sidecar: dict[str, Any], results: dict[str, Any], selection: di
         lines.append(f"  {tag}.n_trials: run={metrics['n_trials']!r} golden={row['n_trials']!r}")
         flips[tag] = _flips_against_store(trials, tag, row["correct_vector"])
         ok.append(flips[tag] == 0)
-        lines.append(f"  {tag} 预测翻转 trial 数: {flips[tag]}（判据 =0；golden correct_vector {sum(row['correct_vector'])}/{len(row['correct_vector'])} 正确）")
+        lines.append(f"  {tag} 预测翻转 trial 数: {flips[tag]}，判据为 0，golden correct_vector {sum(row['correct_vector'])}/{len(row['correct_vector'])} 正确")
     recomposed = 0.5 * sum(_golden_row(results, tag, executed[tag])["accuracy"] for tag in TAGS)
-    lines.append(_delta_line("session_score(黄金acc重合成)", metrics["session_score"], recomposed, ok))
-    manifest = {"golden_field_source": "methods_results.json m090 eval-1 行（逐标签实际执行法）", "executed_methods": executed, "chain_substitute": substitute, "flips": flips}
+    lines.append(_delta_line("session_score 按golden重合成", metrics["session_score"], recomposed, ok))
+    manifest = {"golden_field_source": "methods_results.json m090 eval-1 行，逐标签实际执行法", "executed_methods": executed, "chain_substitute": substitute, "flips": flips}
     return all(ok), lines, manifest
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--chain", required=True, choices=sorted(_CHAIN_CONFIGS), help="选链：c1 = sub-m091_ses-20210608 train 钉定；m090eval = sub-m090_ses-20210527 评测双输入")
-    parser.add_argument("-c", "--config", type=Path, default=None, help="链 YAML；缺省按 --chain 选内置示例")
-    parser.add_argument("-o", "--work-dir", type=Path, default=None, help="TaskRunner 工作目录；缺省用临时目录")
+    parser.add_argument("--chain", required=True, choices=sorted(_CHAIN_CONFIGS), help="选链：c1 = sub-m091_ses-20210608 同天基线，m090eval = sub-m090_ses-20210527 评测双输入")
+    parser.add_argument("-c", "--config", type=Path, default=None, help="链 YAML，缺省按 --chain 选内置示例")
+    parser.add_argument("-o", "--work-dir", type=Path, default=None, help="TaskRunner 工作目录，缺省用临时目录")
     parser.add_argument("--data-root", required=True, help="赛题 challenge_data 根目录，替换 __DATA_ROOT__")
     parser.add_argument("--track-root", required=True, help="赛道仓库根目录，替换 __TRACK_ROOT__")
     parser.add_argument("--output-root", required=True, help="产物输出根目录，替换 __OUTPUT_ROOT__")
-    parser.add_argument("--golden", type=Path, default=None, help="c1 链=baseline_c1_cv.json；m090eval 链=methods_results.json；给出则执行逐链 golden parity")
-    parser.add_argument("--selection", type=Path, default=None, help="method_selection.json；m090eval 链 golden parity 必填")
+    parser.add_argument("--golden", type=Path, default=None, help="c1 链=baseline_c1_cv.json，m090eval 链=methods_results.json，给出则执行逐链 golden parity")
+    parser.add_argument("--selection", type=Path, default=None, help="method_selection.json，m090eval 链 golden parity 必填")
     args = parser.parse_args(argv)
 
     output_root = Path(args.output_root)
@@ -169,10 +166,10 @@ def main(argv: list[str] | None = None) -> int:
         ok, lines, manifest = _c1_parity(sidecar, golden)
     else:
         if args.selection is None:
-            parser.error("m090eval 链 golden parity 需要 --selection（method_selection.json）")
+            parser.error("m090eval 链 golden parity 需要 --selection，即 method_selection.json")
         selection = json.loads(args.selection.read_text(encoding="utf-8"))
         ok, lines, manifest = _m090_parity(sidecar, golden, selection, store)
-    print(f"[e2e] golden parity (per-field abs <= {PARITY_TOLERANCE:g}, 单线程标准口径):")
+    print(f"[e2e] golden parity, per-field abs <= {PARITY_TOLERANCE:g}, 单线程标准口径:")
     print("\n".join(lines))
     manifest_path = output_root / f"{args.chain}.e2e_manifest.json"
     manifest_path.write_text(json.dumps({"chain": args.chain, "golden": str(args.golden), **manifest}, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")

@@ -1,4 +1,4 @@
-"""赛道评分数学：逐 session R²、延迟分与分级聚合。"""
+"""赛道评分公式：逐 session R²、延迟分与分级聚合。"""
 
 from __future__ import annotations
 

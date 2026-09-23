@@ -1,7 +1,4 @@
-"""跨天漂移指标算子（ANALYZE 阶段）：计算逐 session 漂移指标与聚合结果。
-
-context 态下逐通道真值列写入 `ecephys[k].channel_summary`，会话级目标指标写入 `context.metrics` 的 `drift_targets` 键，由 `ExportEvalMetrics` 统一写出 eval JSON 侧车。
-"""
+"""ANALYZE 阶段的跨天漂移指标算子。"""
 
 from __future__ import annotations
 
@@ -40,7 +37,7 @@ SUMMARY_FIELDS = (
 
 
 def read_binned_spikes(nwb_path: str | Path) -> np.ndarray:
-    """pynwb 只读物化单 session 的 (T, 512) 发放矩阵，行列与 timestamps 不一致时转置纠正。"""
+    """只读物化单个 session 的 (T, C) 发放矩阵。"""
     path = Path(nwb_path)
     with NWBHDF5IO(str(path), "r") as io:
         series = io.read().acquisition["binned_spikes"]
@@ -71,11 +68,7 @@ def discover_sweep_inputs(
     tasks: Sequence[str] | None = None,
     levels: Sequence[str] | None = None,
 ) -> list[tuple[str, str, str | None, str, Path]]:
-    """按数据根目录布局发现会话。
-
-    返回 (task, level, horizon, session_key, nwb_path)；train = public heldin，
-    query = 各级 heldout。
-    """
+    """按数据根目录布局发现会话。"""
     root = Path(data_root)
     want_tasks = tuple(tasks) if tasks else TASKS
     want_levels = set(levels) if levels else {"train", "easy", "normal", "hard"}
@@ -121,7 +114,7 @@ def _attach_channel_summary(slot: Any, prefix: str, fr: np.ndarray, centroid: np
 
 
 def _slot_fr(context: Any, key: str) -> np.ndarray:
-    """会话发放率向量的输入矩阵：query 侧取根容器 `binned_spikes` 的计数矩阵，support 侧取记录的 `electrophysiology` 信号。"""
+    """按数据侧记录槽计算会话发放率向量。"""
     slot = context.ecephys[key]
     x = np.asarray(session_counts_matrix(context, key))
     if x.ndim == 2 and x.shape[1] != slot.channel_count and x.shape[0] == slot.channel_count:
@@ -133,18 +126,7 @@ def _slot_fr(context: Any, key: str) -> np.ndarray:
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.ANALYZE)
 class LinceDriftAnalysis(DefaultProcessor):
-    """跨天漂移指标算子。
-
-    Parameters：``source`` = context（读 ecephys 槽）| sessions（直传清单：task/level/
-    session_key 必填，horizon 可选，x 为 2-D ndarray 或 nwb_path）| sweep（``data_root``
-    必须显式传入，tasks/levels 筛选）。context 态：``target_keys`` 默认
-    ["query"]；质心 ``centroid_key``（键或键列表）与 ``centroid``（显式向量）二选一；
-    ``session_key``/``train_session_keys`` 目录名算 gap_days，缺任一侧 NaN+告警；
-    ``result_prefix`` 为 channel_summary 列名前缀，默认 drift。分级词表参数
-    ``date_pattern``（会话目录名日期正则，首个捕获组为 8 位日期）、``train_level`` /
-    ``holdout_levels`` / ``agg_level``（质心层 / gap×cos 取样层 / 聚合层名）默认值均为运动赛道口径；
-    ``tasks`` 缺省用 ("MA_CO", "MA_RT")。
-    """
+    """跨天漂移指标算子。"""
 
     def __init__(
         self,

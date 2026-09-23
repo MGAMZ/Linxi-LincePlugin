@@ -1,7 +1,6 @@
-"""DPA 赛题 NWB 的读取与校验层（h5py 只读）。
+"""DPA 赛题 NWB 的读取与校验层。
 
-读取 units 表与试次表并校验结构契约，任一契约不符时报错并附路径与双方值。
-发放率矩阵由 `spike_times` 按 bin=floor(秒) 重建（0921 包部分文件的存储矩阵与试次指派错乱，仅作形状校验对象）。
+发放率矩阵由 units 的 spike_times 重建。发布数据的部分文件存储矩阵 `Firing_rate_1000ms` 与试次指派不一致，仅形状可信。
 """
 
 from __future__ import annotations
@@ -38,7 +37,7 @@ def _text(v: object) -> str:
 
 
 def _integral(v: np.ndarray, what: str, path: Path) -> np.ndarray:
-    """把整值 float 数组 cast 为 int64。存在非有限或非整值元素时抛 ValueError。"""
+    """把整值 float 数组 cast 为 int64。"""
     if not bool(np.all(np.isfinite(v))):
         raise ValueError(f"{path}: {what} 含非有限值")
     bad = v[np.not_equal(v, np.round(v))]
@@ -55,7 +54,7 @@ def _dataset_column(dataset: h5py.Dataset) -> np.ndarray:
 
 
 def parse_session_name(path: Path) -> tuple[str, str, Role]:
-    """从文件名解析 (subject, session_date, role)。不符合 sub-*_ses-*_task-DPA-*.nwb 约定时抛 ValueError。"""
+    """从文件名解析 (subject, session_date, role)。"""
     m = NWB_RE.match(path.name)
     if m is None:
         raise ValueError(f"文件名不符合 sub-*_ses-*_task-DPA-*.nwb 约定: {path}")
@@ -63,7 +62,7 @@ def parse_session_name(path: Path) -> tuple[str, str, Role]:
 
 
 def check_role_columns(path: Path, role: Role, columns: frozenset[str]) -> None:
-    """文件名角色与 trials 实际列集交叉校验：train/eval-1 要求标签四列在位，eval/eval-2 要求全部缺失。"""
+    """文件名角色与 trials 列集交叉校验。"""
     expected = BASE_COLS | LABEL_COLS if role in LABELLED_ROLES else BASE_COLS
     if columns == expected:
         return
@@ -71,19 +70,15 @@ def check_role_columns(path: Path, role: Role, columns: frozenset[str]) -> None:
     unexpected = sorted(columns - expected)
     detail = ""
     if missing:
-        detail += f"；缺失列 {missing}"
+        detail += f"，缺失列 {missing}"
     if unexpected:
-        detail += f"；多余列 {unexpected}"
+        detail += f"，多余列 {unexpected}"
     raise ValueError(f"{path}: 文件名角色 {role!r} 与 trials 列集不符，期望列 {sorted(expected)}，实际列 {sorted(columns)}{detail}")
 
 
 @dataclass(frozen=True, slots=True)
 class DpaSessionArrays:
-    """单个 DPA session NWB 的只读物化结果，全部数值已脱离 HDF5 句柄。
-
-    `fr` 为尖峰重建矩阵（float64 计数，1000 ms bin 的计数与 Hz 发放率数值相同）；
-    `trial_index` / `bin_index` 是与重建行序一致的规范索引列（trial 主序 0-based、trial 内 1-based）。
-    """
+    """单个 DPA session NWB 的只读物化结果。`fr` 行序对应 0-based 的 `trial_index` 与 trial 内 1-based 的 `bin_index`。"""
 
     subject: str
     session_date: str
@@ -103,7 +98,7 @@ class DpaSessionArrays:
 
 
 def read_dpa_nwb(nwb_path: str | Path) -> DpaSessionArrays:
-    """以 h5py 只读物化一个 DPA session NWB，全契约校验后返回 DpaSessionArrays。"""
+    """只读物化一个 DPA session NWB 并做契约校验。"""
     p = Path(nwb_path)
     if not p.is_file():
         raise FileNotFoundError(f"DPA session NWB file not found: {p}")
@@ -181,10 +176,7 @@ def _check_spike_counts(pairs: np.ndarray, ends: np.ndarray, n_spikes: np.ndarra
 
 
 def _rebuild_fr(pairs: np.ndarray, ends: np.ndarray, delays: np.ndarray, n_units: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """由尖峰时刻表重建 (Σdelay, n_units) 发放计数矩阵与规范 trial/bin 索引列。
-
-    尖峰已按 units 行序分段（分段边界 spike_times_index 累计和）；行号 = 所属 trial 行块起点 + floor(延迟内秒)。
-    """
+    """由尖峰时刻表重建 (Σdelay_duration, n_units) 发放计数矩阵与 trial/bin 索引列。"""
     trial = pairs[:, 0].astype(np.int64)
     tsec = pairs[:, 1]
     unit_col = np.repeat(np.arange(n_units, dtype=np.int64), np.diff(np.concatenate(([0], ends))))

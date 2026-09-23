@@ -1,8 +1,7 @@
-# 临策·运动跨天解码 — WF baseline 端到端最小链路（载入 → 解码推理 → 漂移分析 → LinshuFile 导出）。
-# 钉死 session：MA_CO / easy / MA-CO-20231227-01。
-# query = private/MA_CO/easy/heldout（25 trials，评测侧）；support = 同日 public/MA_CO/easy/heldin（100 trials，校准侧）。
-# 两个 load 步骤各自显式传 input_path；query 侧最后载入，context.session 落评测侧目录标签。
-# WF bundle 自带 z-score 统计。
+# 临策·运动跨天解码 — WF baseline 端到端最小链路为 载入 → 解码推理 → 漂移分析 → LinshuFile 导出。
+# 本链处理的 session：MA_CO / easy / MA-CO-20231227-01。
+# query = private/MA_CO/easy/heldout 共 25 trials，为评测侧，support = 同日 public/MA_CO/easy/heldin 共 100 trials，为校准侧。
+# 两个 load 步骤各自显式传 input_path，query 侧最后载入，context.session 为评测侧目录标签。
 name: lince-e2e-wf-MA-CO-20231227-01
 linxi_plugin:
   - linxi_linceplugin.hand_motion_decode.load_session
@@ -46,7 +45,7 @@ steps:
     params:
       output_path: "__OUTPUT_ROOT__/MA-CO-20231227-01.ls"
       ecephys_key: "query"
-      # 解码/漂移评测载荷经 context.metrics 暂存袋由 ExportEvalMetrics 写入同级侧车；trials 表为结构性列
+      # 本链 trials 表只含结构列，预测写入 query 记录的 auxiliary_channels，评分写入评测侧车，因此 require_eval_cols 设为 false
       session_scalar_cols: []
       require_eval_cols: false
       on_lossy: "warn"

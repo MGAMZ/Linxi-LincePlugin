@@ -1,7 +1,4 @@
-"""赛道 baseline 解码推理算子（POSTPROCESS 阶段）：以官方预置权重执行解码推理与 session 评分。
-
-逐 bin 预测写回 query 记录的 auxiliary_channels，session 评测载荷写入 `context.metrics` 暂存袋，由 `ExportEvalMetrics` 统一写出 eval JSON 侧车。
-"""
+"""POSTPROCESS 阶段的赛道 baseline 解码推理算子，以官方预置权重执行解码推理与评分。"""
 
 from __future__ import annotations
 
@@ -71,7 +68,7 @@ def _session_arrays(context: Any, side: str):
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.POSTPROCESS)
 class BaselineDecodeInfer(DefaultProcessor):
-    PROCESSOR_NAME = "BaselineDecodeInfer"  # 显式声明注册名，稳定 YAML 契约
+    PROCESSOR_NAME = "BaselineDecodeInfer"
 
     def __init__(
         self,
@@ -110,7 +107,7 @@ class BaselineDecodeInfer(DefaultProcessor):
         if self.data_root is None:
             raise ValueError(
                 "BaselineDecodeInfer requires an explicit `data_root` processor param when `weights_dir` "
-                "is empty (preset weights resolve to `<data_root 上级>/challenge_code/Participant/...`)."
+                "is empty, preset weights resolve to `<data_root 上级>/challenge_code/Participant/...`."
             )
         return _engine.default_weights_dir(self.data_root, self.model)
 

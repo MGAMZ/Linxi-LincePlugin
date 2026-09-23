@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "linxi-plugin-lince"
-version = "0.1.0"
+version = "0.1.1"
 description = "临策算法竞赛通用算子插件仓库"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -13,15 +13,12 @@ authors = [
     { name = "mgam", email = "312065559@qq.com" }
 ]
 dependencies = [
-    # WF baseline decoder (decode_baseline) and NEO baseline (EpiBaselineInfer)
     "scikit-learn",
-    # NEO 赛道 BDF 读取 (epidural_motion_decode._bdf)
     "pyedflib",
 ]
 
 [project.optional-dependencies]
 gru = [
-    # GRU baseline decoder; plain "torch" = device-neutral wheel choice, no CUDA flavor pin
     "torch",
 ]
 

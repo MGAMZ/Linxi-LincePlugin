@@ -1,5 +1,5 @@
-# 临策·基于人类硬膜外脑电的运动解码 — NEO heldin 组合动作 session 端到端最小链路（载入 → 评测窗口 → baseline 推理 → LinshuFile 导出 → 评测侧车导出）。
-# 固定测试 session：P01_20241112-dual-MA（训练集中唯一的 dual 日）。
+# 临策·基于人类硬膜外脑电的运动解码 — NEO heldin 组合动作 session 端到端最小链路为 载入 → 评测窗口 → baseline 推理 → LinshuFile 导出 → 评测侧车导出。
+# 固定测试 session：P01_20241112-dual-MA，为训练集中唯一的 dual 日。
 # dual trigger 编码与 single 同码不同义，范式判定与标签映射在载入层按目录名完成，下游只消费 label 列。
 name: lince-e2e-epi-P01_20241112-dual-MA
 linxi_plugin:

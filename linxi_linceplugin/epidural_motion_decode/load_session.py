@@ -1,7 +1,4 @@
-"""NEO 赛题 BDF session 到临析内部表示的载入算子（LOAD 阶段）。
-
-信号与试次表写入 `context.ieeg[recording_key]`（契约的 iEEGRecording 容器，electrode_placement 标注 epidural）；query 侧同时填顶层 `context.trials`。发布文件头部不合规的读取绕行在 `_bdf` 层处理，本算子不做数据修复。
-"""
+"""NEO 赛题 BDF session 到临析内部表示的 LOAD 阶段载入算子。"""
 
 from __future__ import annotations
 
@@ -22,7 +19,7 @@ _POWER_LINE_FREQUENCY = 50.0
 
 
 def epi_signal(context: LinxiContext, side: str) -> xr.DataArray:
-    """逐侧信号矩阵 (time, channel)：取 `ieeg[side]` 主信号。"""
+    """取 `ieeg[side]` 主信号矩阵，形状 (time, channel)。"""
     slot = context.ieeg.get(side)
     if slot is None or slot.electrophysiology is None:
         raise ValueError(f"ieeg[{side!r}] 无主信号：应由 LoadLinceEpiSession(recording_key={side!r}) 产出")
@@ -53,15 +50,7 @@ def _epi_recording(arrays: EpiSessionArrays) -> iEEGRecording:
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.LOAD)
 class LoadLinceEpiSession(DefaultProcessor):
-    """把一个 NEO 赛题 session 目录（BDF 三件套）投影进临析内部表示的 LOAD 算子。
-
-    Parameters
-    ----------
-    input_path:
-        session 目录路径（目录名以 ``-single-MA`` 或 ``-dual-MA`` 结尾，范式由名称判定）。必须显式传入。
-    recording_key:
-        写入 `context.ieeg` 的键。query = 链上主记录（同时填顶层 `context.trials`）；support = 辅助记录（只写槽）。
-    """
+    """把一个含 BDF 三件套的 NEO 赛题 session 目录投影进临析内部表示的 LOAD 算子。"""
 
     def __init__(
         self,

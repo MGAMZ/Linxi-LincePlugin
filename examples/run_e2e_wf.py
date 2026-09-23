@@ -1,6 +1,4 @@
 """临策 e2e WF 示例驱动：替换 YAML 路径占位符后执行流水线，可选与 golden 基准比对。
-
-评测读数取自 store 同级 eval JSON 侧车。
 """
 
 from __future__ import annotations
@@ -12,13 +10,13 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-# 数值口径为引擎标准基线：linxi 先于其余第三方依赖导入，进程以 OpenBLAS 单线程计算。
+# linxi 须先于其余第三方依赖导入，进程以 OpenBLAS 单线程计算，保证数值可重现。
 from linxi.fabric.linxi_context import LinxiContext
 from linxi.fabric.metadata_injection import apply_pipeline_metadata
 from linxi.fabric.task_pipeline import PipelineDefinition
 from linxi.fabric.task_runner import TaskRunner
 
-PARITY_TOLERANCE = 1e-4  # 与官方黄金基准逐字段绝对差上限（引擎默认 OpenBLAS 单线程口径）
+PARITY_TOLERANCE = 1e-4
 PARITY_FIELDS = ("r2_x", "r2_y", "r2_mean_raw")
 DEFAULT_CONFIG = Path(__file__).with_name("e2e_wf_MA-CO-20231227-01.yaml")
 _PATH_TOKENS = ("__DATA_ROOT__", "__CODE_ROOT__", "__OUTPUT_ROOT__")
@@ -44,14 +42,14 @@ def _parity_report(row: dict[str, float], gold: dict[str, float]) -> tuple[bool,
     delta_score = abs(recomposed - gold["session_score"])
     ok &= delta_score <= PARITY_TOLERANCE
     lines.append(
-        f"  session_score(黄金延迟重合成): ours={recomposed!r} golden={gold['session_score']!r} |Δ|={delta_score:.3e}"
+        f"  session_score 按golden延迟重合成: ours={recomposed!r} golden={gold['session_score']!r} |Δ|={delta_score:.3e}"
     )
-    lines.append(f"  session_score(本机直测) 仅展示，延迟分量硬件相关: run={row['session_score']!r}")
+    lines.append(f"  session_score 本机实测，仅展示，延迟分量硬件相关: run={row['session_score']!r}")
     return ok, lines
 
 
 def _resolve_config(config_path: Path, data_root: str, code_root: str, output_root: str, work_dir: Path) -> Path:
-    """把 YAML 占位符替换为命令行根路径，写入工作目录下的临时配置；仓库 YAML 不被改动。"""
+    """把 YAML 占位符替换为命令行根路径，写入工作目录下的临时配置。"""
     text = config_path.read_text(encoding="utf-8")
     for token, root in zip(_PATH_TOKENS, (data_root, code_root, output_root)):
         text = text.replace(token, root)
@@ -66,11 +64,11 @@ def _resolve_config(config_path: Path, data_root: str, code_root: str, output_ro
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("-c", "--config", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument("-o", "--work-dir", type=Path, default=None, help="TaskRunner 工作目录；缺省用临时目录")
+    parser.add_argument("-o", "--work-dir", type=Path, default=None, help="TaskRunner 工作目录，缺省用临时目录")
     parser.add_argument("--data-root", required=True, help="赛题 challenge_data 根目录，替换 __DATA_ROOT__")
     parser.add_argument("--code-root", required=True, help="赛道 challenge_code 目录，替换 __CODE_ROOT__")
     parser.add_argument("--output-root", required=True, help="产物输出根目录，替换 __OUTPUT_ROOT__")
-    parser.add_argument("--golden", type=Path, default=None, help="wf_challenge_results.json 路径；给出则执行逐字段 ≤1e-4 对账")
+    parser.add_argument("--golden", type=Path, default=None, help="wf_challenge_results.json 路径，给出则执行逐字段 ≤1e-4 对账")
     args = parser.parse_args(argv)
 
     output_root = Path(args.output_root)
@@ -104,9 +102,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     gold = _golden_row(args.golden, row["session_id"])
     ok, lines = _parity_report(row, gold)
-    print(f"[e2e] golden parity (per-field abs <= {PARITY_TOLERANCE:g}, 单线程标准口径):")
+    print(f"[e2e] golden parity, per-field abs <= {PARITY_TOLERANCE:g}, 单线程标准口径:")
     print("\n".join(lines))
-    print("[e2e] self double-run parity: deterministic sidecar/store fields must be bitwise-identical across runs")
     print(f"[e2e] PARITY {'PASS' if ok else 'FAIL'}")
     return 0 if ok else 1
 

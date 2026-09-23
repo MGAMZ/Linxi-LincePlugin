@@ -1,7 +1,5 @@
-"""连续电位记录（`context.ieeg` 中的记录）的 LinshuFile 导出接线（EXPORT 阶段）。
+"""`context.ieeg` 连续电位记录的 LinshuFile 导出。"""
 
-上游 ``WriteLinshuFile`` 的 materialize 面向 ecephys 记录设计，固定向 ecephys 键写入空占位记录，iEEGRecording 类模态不适用。本接线对 trials 表执行与其他赛道一致的表达性归一后直接调用 ``LinxiContext.write`` 写出 Zarr 目录 store，评测附件文件仍由 `ExportEvalMetrics` 从 `run_state.output_path` 派生。
-"""
 from __future__ import annotations
 
 import os
@@ -25,7 +23,7 @@ __all__ = ["LinceWriteIeegLinshuFile"]
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.EXPORT)
 class LinceWriteIeegLinshuFile(DefaultProcessor):
-    """把 `context.ieeg[recording_key]` 记录与试次表评测列写出为 ``.ls``（Zarr 目录 store）。
+    """把 `context.ieeg[recording_key]` 记录与试次表评测列写出为 `.ls`。
 
     Example YAML configuration::
 
@@ -37,22 +35,22 @@ class LinceWriteIeegLinshuFile(DefaultProcessor):
             on_lossy: "warn"
             overwrite: true
 
-    Parameters
-    ----------
-    output_path : str
+    Args
+    ----
+    output_path
         `.ls` store 路径，必须显式传入。
-    recording_key : str
-        `context.ieeg` 槽键，临策单记录布局默认 ``"query"``。
-    overwrite : bool
-        目标已存在时是否替换，透传语义与上游一致。
-    skip_fields : list[str] | None
-        按叶字段名跳过写入的集合，透传给 ``LinxiContext.write`` 的 ``exclude_fields``。
-    require_eval_cols : bool
-        True 时要求 trials 表存在结构列以外的评测列，防止解码结果缺失时空壳导出。
-    on_lossy : {"warn", "fail"}
-        有损策略：``"warn"`` 挪位保留/丢弃均报结构化 WARNING；``"fail"`` 一律失败。
-    structural_cols : list[str] | None
-        视为非评测的结构列集合，默认 ``start_time``/``stop_time``/``trial_id``。
+    recording_key
+        `context.ieeg` 槽键。
+    overwrite
+        目标已存在时是否替换。
+    skip_fields
+        按叶字段名跳过写入的集合。
+    require_eval_cols
+        为 True 时要求 trials 表含结构列以外的评测列。
+    on_lossy
+        有损处理策略，取 `warn` 或 `fail`。
+    structural_cols
+        视为非评测的结构列集合。
     """
 
     def __init__(
@@ -82,12 +80,12 @@ class LinceWriteIeegLinshuFile(DefaultProcessor):
                 "LinceWriteIeegLinshuFile requires an explicit `output_path` processor param")
         slot = context.ieeg.get(self.recording_key)
         if slot is None:
-            raise LinceExportError(f"context.ieeg 缺信号槽 {self.recording_key!r}（现有键={sorted(context.ieeg)}）")
+            raise LinceExportError(f"context.ieeg 缺信号槽 {self.recording_key!r}，现有键为 {sorted(context.ieeg)}")
         if slot.electrophysiology is None:
             raise LinceExportError(
                 f"ieeg[{self.recording_key!r}].electrophysiology 为空：信号槽须由 load 算子预填")
         if context.trials is None and self._require_eval_cols:
-            raise LinceExportError("context.trials 为 None：无评测试次表可导出；如仅需信号导出请显式 require_eval_cols=False")
+            raise LinceExportError("context.trials 为 None：无评测试次表可导出。如仅需信号导出请显式 require_eval_cols=False")
 
         self._normalize_trials(context)
         out = Path(self.output_path)

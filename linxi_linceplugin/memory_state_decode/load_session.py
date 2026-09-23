@@ -1,7 +1,4 @@
-"""DPA 赛题 NWB 到临析内部表示的载入算子（LOAD 阶段）：读取发放率矩阵、units 表与试次表。
-
-query 侧的速率矩阵、单元表、试次表分别写入根容器 `binned_spikes` / `neurons` 与顶层 `context.trials`，support 侧整体写入 `context.ecephys[recording_key]`，session 标识取 NWB 文件名主干。
-"""
+"""DPA 赛题 NWB 投影进临析内部表示的 LOAD 阶段载入算子。"""
 
 from __future__ import annotations
 
@@ -26,7 +23,7 @@ _TRIAL_INDEX_KEY = "trial_index"
 _BIN_INDEX_KEY = "bin_index"
 _SIGNAL_NAME = "firing_rate_1000ms"
 _SPIKE_AXIS_NOTE = (
-    "spike_samples 为延迟拼接轴上的秒值（=trial_slices[trial, 0] + 延迟内相对秒），sampling_frequency=1.0 Hz 使 sample 数值即秒"
+    "spike_samples 为延迟拼接轴上的秒值，即 trial_slices[trial, 0] 加延迟内相对秒，sampling_frequency=1.0 Hz 使 sample 数值即秒"
 )
 
 
@@ -35,15 +32,14 @@ def _plain(value: object) -> Any:
 
 
 _COORD_RENAMES = {"channel": "unit_channel"}
-# 导出侧多级坐标展开的层级序属性名（列化落盘的 units 表自描述，读回经 `units_frame` 还原）。
+# units 多级坐标的层级序属性名。
 UNITS_LEVELS_ATTR = "lince_units_levels"
 
 
 def _channel_coord(units: pd.DataFrame) -> xr.DataArray:
-    """units 表整体挂为矩阵 channel 维的多级坐标（level 0 = id，与数据列序位置对应）。
+    """units 表整体挂为矩阵 channel 维的多级坐标。
 
-    Kilosort 列 `channel` 与坐标所挂的维度同名，xarray 拒绝该多级索引，坐标层改名为
-    `unit_channel`，`dpa_units` 读回时还原列名。
+    Kilosort 列 `channel` 与维度同名，xarray 拒绝该组合，坐标层改名 `unit_channel`，读回时还原。
     """
     index = pd.MultiIndex.from_frame(units)
     index = index.set_names([_COORD_RENAMES.get(n, n) for n in index.names])
@@ -51,7 +47,7 @@ def _channel_coord(units: pd.DataFrame) -> xr.DataArray:
 
 
 def _dpa_neuron_info(arrays: DpaSessionArrays) -> NeuronInfo:
-    """units 表与逐单元 spike 序列物化为契约的神经元容器；spike 行块边界由 spike_times_index 给出。"""
+    """units 表与逐单元 spike 序列物化为契约的神经元容器。"""
     rows = arrays.units.to_dict("records")
     starts = arrays.trial_slices[:, 0]
     bounds = np.concatenate(([0], arrays.spike_ends))
@@ -75,11 +71,10 @@ def _dpa_neuron_info(arrays: DpaSessionArrays) -> NeuronInfo:
 
 
 def _binned_spikes(arrays: DpaSessionArrays) -> BinnedSpikes:
-    """构建 query 侧速率矩阵的根容器 `binned_spikes`。
+    """构建 query 侧根容器 `binned_spikes`。
 
-    矩阵为载入层由 `spike_times` 重建的尖峰计数（存储 `Firing_rate_1000ms` 矩阵仅作形状校验对象）；
-    源数据无逐行真实时间戳（trial 延迟窗拼接轴），`time` 置空、行→时间语义由 `time_reference` 声明；
-    1000 ms bin 的发放率（Hz）在数值上等于该 bin 的尖峰计数，落入计数容器。
+    源数据为 trial 延迟窗拼接轴，无逐行真实时间戳，`time` 置空，行含义由 `time_reference` 声明。
+    Hz 发放率数值等于每 1000 ms bin 的尖峰计数，存入计数容器。
     """
     counts = xr.DataArray(arrays.fr, dims=("time", "channel"), coords={"channel": _channel_coord(arrays.units)})
     return BinnedSpikes(
@@ -98,15 +93,7 @@ def _binned_spikes(arrays: DpaSessionArrays) -> BinnedSpikes:
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.LOAD)
 class LoadLinceDpaSession(DefaultProcessor):
-    """把一个 DPA 赛题 session 的 NWB 投影进临析内部表示的 LOAD 算子。
-
-    Parameters
-    ----------
-    input_path:
-        session NWB 文件路径。必须显式传入；本算子刻意不消费 ``run_state.input_path``，以免多 load 步骤相互污染。
-    recording_key:
-        写入 `context.ecephys` 的键。query = 链上主记录（速率矩阵与 units 坐标写入根容器 `binned_spikes`，units 与 spike 序列写入 `neurons`，同时填 `context.recording` 与顶层 `context.trials`）；support = 校准记录（整体只写入该键，units 表挂主信号 channel 坐标）。
-    """
+    """把一个 DPA 赛题 session 的 NWB 投影进临析内部表示的 LOAD 算子。"""
 
     def __init__(
         self,
@@ -150,10 +137,9 @@ class LoadLinceDpaSession(DefaultProcessor):
 
 
 def flatten_units_channel_coord(matrix: xr.DataArray) -> xr.DataArray | None:
-    """矩阵 channel 坐标为 units 表 MultiIndex 时 reset_index 展开为逐 level 坐标列并返回副本，非该形态返回 None。
+    """将 units 表 MultiIndex 形态的 channel 坐标展开为逐 level 坐标列并返回副本。
 
-    xarray→zarr 编码层拒序列化 MultiIndex 坐标（``NotImplementedError: variable 'channel' is a MultiIndex,
-    which cannot yet be serialized``），导出前须列化；层级序记入 `UNITS_LEVELS_ATTR` 属性供读回。
+    xarray 的 Zarr 编码层拒写 MultiIndex 坐标，导出前须先展开为坐标列。
     """
     index = matrix.indexes.get("channel") if "channel" in matrix.dims else None
     if not isinstance(index, pd.MultiIndex):
@@ -163,11 +149,7 @@ def flatten_units_channel_coord(matrix: xr.DataArray) -> xr.DataArray | None:
 
 
 def units_frame(matrix: xr.DataArray) -> pd.DataFrame:
-    """units 矩阵的 channel 坐标 → units 表，列集与列序同 `read_dpa_nwb` 的 units 帧。
-
-    接受两形态：内存 MultiIndex（载入态，`_channel_coord` 产出）与落盘逐 level 坐标列
-    （`flatten_units_channel_coord` 输出经 `from_zarr` 读回）。
-    """
+    """矩阵 channel 坐标取回 units 表。"""
     index = matrix.indexes.get("channel") if "channel" in matrix.dims else None
     if isinstance(index, pd.MultiIndex):
         return index.to_frame(index=False).rename(columns={v: k for k, v in _COORD_RENAMES.items()})
@@ -177,7 +159,7 @@ def units_frame(matrix: xr.DataArray) -> pd.DataFrame:
 
 
 def dpa_units(context: Any, side: str) -> pd.DataFrame:
-    """逐侧 units 表（列集与列序同 `read_dpa_nwb` 的 units 帧）：query 侧取 `binned_spikes` 的 channel 坐标，support 侧取记录主信号的 channel 坐标。"""
+    """返回 side 所指一侧记录的 units 表。"""
     if side == "query":
         spikes = context.binned_spikes
         if spikes is None:
@@ -191,7 +173,7 @@ def dpa_units(context: Any, side: str) -> pd.DataFrame:
         coord = signal.data.coords["channel"]
     index = coord.to_index()
     if not isinstance(index, pd.MultiIndex):
-        raise ValueError(f"{side!r} 侧矩阵的 channel 坐标不是 DPA units 多级坐标（index.name={index.name!r}）")
+        raise ValueError(f"{side!r} 侧矩阵的 channel 坐标不是 DPA units 多级坐标，index.name={index.name!r}")
     return index.to_frame(index=False).rename(columns={v: k for k, v in _COORD_RENAMES.items()})
 
 

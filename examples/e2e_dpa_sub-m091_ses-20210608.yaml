@@ -1,7 +1,7 @@
-# 临策·记忆状态跨个体跨天解码 — DPA c1 同天基线端到端最小链路（载入 → 基线推理 → LinshuFile 导出 → 评测侧车导出）。
-# 钉死 session：challenge1 / sub-m091_ses-20210608 / train（158 trial 带标签）。
-# 链上推理 method=baseline：challenge1 路由 = 教程 unit_space 同日五折 CV（指标与 output/csv/baseline_c1_cv.json 对账）。
-# 单输入链：context.session = 载入文件主干；units 表 MultiIndex channel 坐标由导出接线层展开为 level 列。
+# 临策·记忆状态跨个体跨天解码 — DPA c1 同天基线端到端最小链路为 载入 → 基线推理 → LinshuFile 导出 → 评测侧车导出。
+# 本链处理的 session：challenge1 / sub-m091_ses-20210608 / train 共 158 trial 带标签。
+# 链上推理 method=baseline：challenge1 为 unit_space 特征同天五折 CV 基线，指标与 output/csv/baseline_c1_cv.json 对账。
+# 单输入链：context.session = 载入文件主干。
 name: lince-e2e-dpa-sub-m091_ses-20210608
 linxi_plugin:
   - linxi_linceplugin.memory_state_decode.load_session
@@ -25,7 +25,6 @@ steps:
     params:
       output_path: "__OUTPUT_ROOT__/sub-m091_ses-20210608_task-DPA-train.ls"
       ecephys_key: "query"
-      # 评测载荷（CV 指标与 lince_dpa_c1_cv 明细）经 context.metrics 暂存袋由 ExportEvalMetrics 写同级侧车
       session_scalar_cols: []
       require_eval_cols: true
       on_lossy: "warn"

@@ -1,8 +1,8 @@
-# 临策·记忆状态跨个体跨天解码 — DPA m090 评测 session 端到端最小链路（双载入 → 基线推理 → LinshuFile 导出 → 评测侧车导出）。
-# 钉死 session：challenge3 / sub-m090_ses-20210527（评测日）。
-# 双输入：support = eval-2（288 trial 无标签，整体只落 ecephys 槽）；query = eval-1（32 trial 带标签，最后载入，context.session 落 eval-1）。
-# 链上推理 method=baseline：challenge3 路由 = 恒等 region 池化跨个体管线（4 c3-train 拼接训练，对 eval-1 产预测与评分）；
-# 逐标签 golden 对照行 = output/csv/method_selection.json 选定法在 methods_results.json 的 m090 eval-1 行；选定法非恒等时按驱动代跑规则处置（见 run_e2e_dpa.py 文档串）。
+# 临策·记忆状态跨个体跨天解码 — DPA m090 评测 session 端到端最小链路为 双载入 → 基线推理 → LinshuFile 导出 → 评测侧车导出。
+# 本链处理的 session：challenge3 / sub-m090_ses-20210527，为评测日。
+# 双输入：support = eval-2 共 288 trial 无标签，query = eval-1 共 32 trial 带标签，最后载入，context.session 为 eval-1 文件主干。
+# 链上推理 method=baseline：challenge3 跨个体基线，对应方法配置 identity/pooled_cvC。
+# 逐标签 golden 对照行 = output/csv/method_selection.json 选定法在 methods_results.json 的 m090 eval-1 行。
 name: lince-e2e-dpa-sub-m090_ses-20210527
 linxi_plugin:
   - linxi_linceplugin.memory_state_decode.load_session
@@ -31,7 +31,7 @@ steps:
     params:
       output_path: "__OUTPUT_ROOT__/sub-m090_ses-20210527_task-DPA-eval-1.ls"
       ecephys_key: "query"
-      # eval-1 逐 trial 预测两列挂在顶层 trials 表随导出落盘；指标八键走 sidecar 袋透传
+      # eval-1 逐 trial 预测两列写入顶层 trials 表随导出写出
       session_scalar_cols: []
       require_eval_cols: true
       on_lossy: "warn"

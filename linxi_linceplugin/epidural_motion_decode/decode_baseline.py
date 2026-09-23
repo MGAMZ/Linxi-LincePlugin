@@ -1,7 +1,4 @@
-"""NEO 赛题 baseline 解码推理算子（POSTPROCESS 阶段）：PSD 特征 + 收缩线性 LDA 统一 8 分类。
-
-训练集从 ``train_root`` 下的全部 session 目录按官方口径重建（BDF 读取、0.2–2.2 s 窗口、去趋势+陷波、Welch 0–150 Hz 4 Hz 分箱 log PSD），预测写回 query 试次表 `pred_label` 列，评测载荷写入 `context.metrics` 暂存袋，由 `ExportEvalMetrics` 统一写出 eval JSON 侧车。方法口径与官方 `baseline_demo.ipynb` 一致。
-"""
+"""NEO 赛题 baseline 解码推理的 POSTPROCESS 阶段算子：PSD 特征 + 收缩线性 LDA 统一 8 分类。"""
 
 from __future__ import annotations
 
@@ -32,7 +29,7 @@ _WINDOW_DURATION = 2.0
 
 
 def psd_features(windows: np.ndarray, sampling_frequency: float) -> np.ndarray:
-    """(N, T, C) float32 窗口 → (N, channel × bins) log PSD 特征，预处理在窗口轴上就地完成。"""
+    """(N, T, C) 窗口数组 → (N, channel × bins) log PSD 特征矩阵。"""
     x = detrend(np.transpose(windows, (0, 2, 1)).astype(np.float64), axis=-1)
     for f0 in _NOTCH_FREQS:
         b, a = iirnotch(f0 / (sampling_frequency / 2.0), Q=30.0)
@@ -74,14 +71,14 @@ def _class_f1(y_true: np.ndarray, y_pred: np.ndarray, classes: list[int]) -> dic
 
 @register_as_linxi_processor(stage=PROCESS_STAGES.POSTPROCESS)
 class EpiBaselineInfer(DefaultProcessor):
-    """统一 8 分类 baseline 推理：对 query 试次表的评测窗口列产出 `pred_label` 与评测载荷。
+    """对 query 试次表的评测窗口列执行统一 8 分类 baseline 推理，产出 `pred_label` 与评测载荷。
 
     Parameters
     ----------
     train_root:
-        训练 session 集合的根目录（其下每个含 `data.bdf` 的子目录为一个 session，官方口径为全部 heldin）。必须显式传入。
+        训练 session 集合根目录，其下每个含 `data.bdf` 的子目录为一个 session。
     recording_key:
-        读写的 `context.ieeg` 槽键，默认 ``"query"``。
+        读写的 `context.ieeg` 槽键。
     """
 
     def __init__(self, train_root: str | None = None, recording_key: str = "query",
