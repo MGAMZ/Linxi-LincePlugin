@@ -23,14 +23,14 @@ pip install -e ".[gru]"
 
 仓库根目录执行驱动脚本。脚本把链配置里的路径占位符替换为命令行传入的根目录后运行，产物为 `.ls` 数据文件与同级的评测结果文件。给出 `--golden` 时与官方基准逐字段比较并打印 `PARITY PASS/FAIL`。
 
-运动赛道：
+运动赛道。链路与数据全部来自官方赛包，`--data-root` 与 `--code-root` 直接指向赛包内的 `challenge_data` 与 `challenge_code`：
 
 ```bash
 python examples/run_e2e_wf.py \
-  --data-root <challenge_data 根目录> \
-  --code-root <challenge_code 目录> \
+  --data-root <赛包 challenge_data 根目录> \
+  --code-root <赛包 challenge_code 目录> \
   --output-root <产物输出目录> \
-  --golden <赛道仓库 output/csv/wf_challenge_results.json>
+  [--golden <评测基准 JSON>]
 ```
 
 记忆赛道。`c1` 链为 challenge1 `sub-m091_ses-20210608` 同天基线，`m090eval` 链为 challenge3 `sub-m090_ses-20210527` 评测日双输入，support 为 eval-2，query 为 eval-1，后者需 `--selection` 指定方法选择文件：
@@ -134,18 +134,18 @@ linxi_plugin:
 
 ### BaselineDecodeInfer
 
+按官方提交接口执行解码：`reset` 与 `predict` 全档位执行，`adapt` 仅在 `level` 为 `normal` 且上下文含 `support` 记录时执行，`easy` 与 `hard` 档不接收校准数据。
+
 | 参数 | 默认 | 说明 |
 |---|---|---|
 | `model` | "wf" | 解码模型：`wf` 或 `gru` |
-| `source` | "context" | `context` 使用流水线已载入数据，`sweep` 按 `data_root` 扫描发现 |
-| `baseline_code_path` | 必填 | 赛道 baseline 代码目录，内含 `Platform/` 与 `Participant/` 两个子目录 |
+| `baseline_code_path` | 必填 | 官方赛包 `challenge_code` 目录，内含 `Participant/` 子目录 |
 | `data_root` | 必填 | `challenge_data` 根目录 |
 | `weights_dir` | `""` | 预置权重目录 |
-| `task` | `""` | 任务类型 `MA_CO` 或 `MA_RT`，`context` 模式必填 |
-| `level` | `""` | 评测难度 `easy`、`normal` 或 `hard`，`context` 模式必填 |
+| `task` | `""` | 任务类型 `MA_CO` 或 `MA_RT`，必填 |
+| `level` | `""` | 评测难度 `easy`、`normal` 或 `hard`，必填 |
 | `horizon` | `""` | normal 与 hard 的时程片 |
 | `session_key` | `""` | session 目录名 |
-| `strict_trial_counts` | `true` | 是否按赛题规则校验 trial 数 |
 | `name` | `None` | 算子实例名 |
 
 ### DpaBaselineInfer
@@ -269,4 +269,4 @@ linxi_plugin:
 
 分箱放电计数矩阵写入根字段 `binned_spikes`，类型为 `linshu_format.core.BinnedSpikes`。`counts` 为 (time, channel) 两维数组，行时间取自源数据时间戳，`bin_sec` 为名义分箱宽度。
 
-评测副本 `<数据文件名>.eval.json` 顶层键为 `session_id`、`tier`、`span`、`metrics`、`drift_targets`，缺失键写入 null。`tier` 在运动链为该 session 的评测难度层级，为 easy、normal 或 hard，在硬膜外链为动作类型，单动作记 single、组合动作记 dual。`span` 在运动链为 normal 与 hard 任务的时程片。记忆链不写 `tier` 与 `span`，硬膜外链不写 `span`，对应键输出为 null。`metrics` 由各链的解码算子填充：运动链含 `n_bins`、`r2_x`、`r2_y`、`r2_mean_raw`、`r2_mean`、`total_latency_ms`、`latency_per_bin_ms`、`latency_score`、`session_score`、`support_trials`、`query_trials`。DPA 链含 `split`、`subject`、`session_date`、`mem_acc`、`corr_acc`、`session_score`、`n_trials`、`method`。硬膜外链含 `macro_f1`、`per_class_f1`、`n_eval_trials`、`n_train_trials`、`classes`、`method`。`drift_targets` 为漂移分析的目标会话清单。schema 之外的键一并写出，NaN 与 ±Inf 序列化为 null。
+评测副本 `<数据文件名>.eval.json` 顶层键为 `session_id`、`tier`、`span`、`metrics`、`drift_targets`，缺失键写入 null。`tier` 在运动链为该 session 的评测难度层级，为 easy、normal 或 hard，在硬膜外链为动作类型，单动作记 single、组合动作记 dual。`span` 在运动链为 normal 与 hard 任务的时程片。记忆链不写 `tier` 与 `span`，硬膜外链不写 `span`，对应键输出为 null。`metrics` 由各链的解码算子填充：运动链含 `n_bins`、`r2_x`、`r2_y`、`r2_mean_raw`、`r2_mean`、`total_latency_ms`、`latency_per_bin_ms`、`latency_score`、`session_score`、`support_trials`、`query_trials`。DPA 链含 `split`、`subject`、`session_date`、`mem_acc`、`corr_acc`、`session_score`、`n_trials`、`method`。硬膜外链含 `macro_f1`、`per_class_f1`、`n_eval_trials`、`n_train_trials`、`classes`、`method`。`drift_targets` 为漂移分析的目标会话清单。schema 之外的键一并写出，NaN 与 ±Inf 序列化为 null。运动链的官方赛包未公布计分公式，其 `latency_score` 与 `session_score` 按插件内部约定权重计算，用于横向比较而非复算官方分数。

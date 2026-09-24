@@ -1,7 +1,8 @@
 # 临策·运动跨天解码 — WF baseline 端到端最小链路为 载入 → 解码推理 → 漂移分析 → LinshuFile 导出。
-# 本链处理的 session：MA_CO / easy / MA-CO-20231227-01。
-# query = private/MA_CO/easy/heldout 共 25 trials，为评测侧，support = 同日 public/MA_CO/easy/heldin 共 100 trials，为校准侧。
-# 两个 load 步骤各自显式传 input_path，query 侧最后载入，context.session 为评测侧目录标签。
+# 本链处理的 session：MA_CO / easy / MA-CO-20231227-01，数据全部来自官方包 challenge_data/public。
+# 按 0924 官方口径，Easy 档评测只调用 reset 与 predict，冻结模型直接预测，不接收校准数据。
+# 本链以同一 heldin 文件既作 query 侧又作 support 侧：query 侧用于冻结预测的样本内自检演示，
+# support 侧仅供漂移分析提供统计参考，解码算子不会将其用于适配。
 name: lince-e2e-wf-MA-CO-20231227-01
 linxi_plugin:
   - linxi_linceplugin.hand_motion_decode.load_session
@@ -19,14 +20,13 @@ steps:
   - stage: load
     processor_name: "LoadLinceSession"
     params:
-      input_path: "__DATA_ROOT__/private/MA_CO/easy/heldout/MA-CO-20231227-01/MA-CO-20231227-01.nwb"
+      input_path: "__DATA_ROOT__/public/MA_CO/easy/heldin/MA-CO-20231227-01/MA-CO-20231227-01.nwb"
       recording_key: "query"
       data_root: "__DATA_ROOT__"
   - stage: postprocess
     processor_name: "BaselineDecodeInfer"
     params:
       model: "wf"
-      source: "context"
       baseline_code_path: "__CODE_ROOT__"
       data_root: "__DATA_ROOT__"
       task: "MA_CO"

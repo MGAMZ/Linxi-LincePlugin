@@ -6,17 +6,17 @@
 
 ## 运动赛道
 
-`e2e_wf_MA-CO-20231227-01.yaml`：easy 任务 `MA-CO-20231227-01` 的 WF 基线全链，链路为载入 → 解码推理 → 漂移分析 → 导出 `.ls` → 导出评测结果文件。
+`e2e_wf_MA-CO-20231227-01.yaml`：easy 任务 `MA-CO-20231227-01` 的 WF 基线全链，链路为载入 → 解码推理 → 漂移分析 → 导出 `.ls` → 导出评测结果文件。数据全部取自官方包 `challenge_data/public`，按 0924 官方口径 Easy 档冻结模型直接预测，链内 heldin 既作预测对象也作漂移统计参考。
 
 ```bash
 python examples/run_e2e_wf.py \
-  --data-root <challenge_data 根目录> \
-  --code-root <challenge_code 目录> \
+  --data-root <赛包 challenge_data 根目录> \
+  --code-root <赛包 challenge_code 目录> \
   --output-root <产物输出目录> \
-  [--golden <赛道仓库 output/csv/wf_challenge_results.json>]
+  [--golden <评测基准 JSON>]
 ```
 
-驱动从评测结果文件读取评测行，打印 session 读数与漂移目标。`--golden` 可不给，不给时只运行链并打印产物路径，不执行对账。给出 `--golden` 时每字段绝对差不超过 1e-4。
+驱动从评测结果文件读取评测行，打印 session 读数与漂移目标。`--golden` 可不给，不给时只运行链并打印产物路径，不执行对账。给出 `--golden` 时每字段绝对差不超过 1e-4，基准须来自与官方 0924 语义一致的评测。
 
 ## 记忆赛道
 

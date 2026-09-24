@@ -1,4 +1,8 @@
-"""赛道评分公式：逐 session R²、延迟分与分级聚合。"""
+"""赛道评分公式：逐 session R² 与延迟分。
+
+官方两版赛包均未公布计分权重，本模块的 `R2_WEIGHT`、`LATENCY_WEIGHT` 为内部约定，
+产出的 `session_score` 是插件内部指标，不应与官方平台分数互相解释。
+"""
 
 from __future__ import annotations
 
@@ -9,8 +13,6 @@ import numpy as np
 BIN_SIZE_MS = 20.0
 R2_WEIGHT = 0.95
 LATENCY_WEIGHT = 0.05
-LEVEL_WEIGHTS = {"easy": 0.25, "normal": 0.45, "hard": 0.30}
-EVALUATION_ORDER = ("easy", "hard", "normal")
 LEVELS = ("easy", "hard", "normal")
 TASKS = ("MA_CO", "MA_RT")
 
@@ -66,33 +68,4 @@ def score_session(
         "latency_per_bin_ms": latency_per_bin_ms,
         "latency_score": latency_score,
         "session_score": float(final_score),
-    }
-
-
-def aggregate_scores(
-    task_results: dict[str, dict[str, list[dict[str, Any]]]],
-) -> dict[str, Any]:
-    task_scores: dict[str, float] = {}
-    level_scores_by_task: dict[str, dict[str, float]] = {}
-    for task_name in TASKS:
-        if task_name not in task_results:
-            raise ValueError(f"Missing task result: {task_name}")
-        level_scores: dict[str, float] = {}
-        for level in LEVELS:
-            sessions = task_results[task_name].get(level, [])
-            if not sessions:
-                raise ValueError(f"No scores for {task_name}/{level}")
-            level_scores[level] = float(np.mean([row["session_score"] for row in sessions]))
-        task_scores[task_name] = sum(
-            level_scores[level] * LEVEL_WEIGHTS[level] for level in LEVELS
-        )
-        level_scores_by_task[task_name] = level_scores
-
-    final_score = float(np.mean([task_scores[task] for task in TASKS]))
-    return {
-        "final_score": final_score,
-        "task_scores": task_scores,
-        "level_scores": level_scores_by_task,
-        "task_aggregation": "uniform_mean",
-        "level_weights": dict(LEVEL_WEIGHTS),
     }
