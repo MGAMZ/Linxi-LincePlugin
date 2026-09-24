@@ -1,5 +1,4 @@
-"""临策 e2e WF 示例驱动：替换 YAML 路径占位符后执行流水线，可选与 golden 基准比对。
-"""
+"""临策 e2e WF 示例驱动"""
 
 from __future__ import annotations
 

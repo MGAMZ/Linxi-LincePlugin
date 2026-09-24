@@ -1,4 +1,4 @@
-"""临策 NEO 赛道 e2e 示例驱动：替换 YAML 路径占位符后运行固定的单动作与双动作 session 流水线，逐样本与基线复现 golden 比对。"""
+"""临策 NEO 赛道 e2e 示例驱动"""
 from __future__ import annotations
 
 import argparse

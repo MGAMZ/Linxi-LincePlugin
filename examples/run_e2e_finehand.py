@@ -1,7 +1,4 @@
-"""临策精细手部 e2e MINI 驱动：同一输入连跑两次链，对账 .ls 与评测结果文件的自身决定论。
-
-对账口径参照运动跨天解码赛道 linshufile_validation.md §1 的排除集先例，不设逐位 PARITY 门。
-"""
+"""临策精细手部 e2e MINI 驱动"""
 # allow: SIZE_OK — e2e 驱动按 examples 成例保持单文件自包含。
 from __future__ import annotations
 

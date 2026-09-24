@@ -1,7 +1,4 @@
-"""DPA 赛题 NWB 的读取与校验层。
-
-发放率矩阵由 units 的 spike_times 重建。发布数据的部分文件存储矩阵 `Firing_rate_1000ms` 与试次指派不一致，仅形状可信。
-"""
+"""DPA 赛题 NWB 的读取与校验层，发放率矩阵一律由 units 的 spike_times 重建，因发布数据部分文件的存储矩阵与试次指派不一致，仅形状可信。"""
 
 from __future__ import annotations
 

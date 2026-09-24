@@ -1,4 +1,4 @@
-"""精细手部运动解码赛道 POSTPROCESS 阶段算子：官方预置 GRU 权重推理、四分量评分与评测结果导出。"""
+"""精细手部赛道 GRU 推理与四分量评分算子"""
 
 from __future__ import annotations
 

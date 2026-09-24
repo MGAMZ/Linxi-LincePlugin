@@ -1,4 +1,4 @@
-"""NEO 赛题 baseline 解码推理的 POSTPROCESS 阶段算子：PSD 特征 + 收缩线性 LDA 统一 8 分类。"""
+"""NEO 赛题 baseline 解码推理算子"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""POSTPROCESS 阶段的赛道 baseline 解码推理算子，以官方预置权重执行解码推理与评分。"""
+"""运动跨天赛道以官方预置权重执行解码推理与评分的算子"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""评测动作窗口截取的 PREPROCESS 阶段算子：按官方评测契约从 session 信号切出逐试次窗口并扩展试次表。"""
+"""按官方评测契约截取逐试次动作窗口的算子"""
 
 from __future__ import annotations
 
