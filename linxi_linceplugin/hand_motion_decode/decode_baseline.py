@@ -140,6 +140,9 @@ class BaselineDecodeInfer(DefaultProcessor):
                 "(the challenge `challenge_code` directory containing Platform/ and Participant/)."
             )
         weights = self._weights()
+        level_cfg = _engine.load_official_loader(
+            self.baseline_code_path
+        ).LEVEL_CONFIGS[self.level]
         base_manifest = _engine.weights_manifest(weights, self.model)
         if not base_manifest:
             raise FileNotFoundError(f"no preset weights found below: {weights}")
@@ -151,14 +154,14 @@ class BaselineDecodeInfer(DefaultProcessor):
         x_query, y_query, query_trial_ids, query_timestamps = _session_arrays(context, QUERY_KEY)
         if self.strict_trial_counts:
             found = _engine.count_trials(query_trial_ids)
-            expect = _engine.LEVEL_TRIALS[self.level][1]
+            expect = level_cfg.query_trials
             if found != expect:
                 raise ValueError(f"ecephys['{QUERY_KEY}'] expects {expect} trials, found {found}")
         if SUPPORT_KEY in context.ecephys:
             x_support, y_support, support_trial_ids, _ = _session_arrays(context, SUPPORT_KEY)
             if self.strict_trial_counts:
                 found = _engine.count_trials(support_trial_ids)
-                expect = _engine.LEVEL_TRIALS[self.level][0]
+                expect = level_cfg.support_trials
                 if found != expect:
                     raise ValueError(
                         f"ecephys['{SUPPORT_KEY}'] expects {expect} trials, found {found}"
@@ -189,6 +192,8 @@ class BaselineDecodeInfer(DefaultProcessor):
             submission_factory=lambda: _engine.make_submission(
                 self.model, self.baseline_code_path, weights
             ),
+            support_trials=level_cfg.support_trials,
+            query_trials=level_cfg.query_trials,
             weights_check=weights_check,
         )
 

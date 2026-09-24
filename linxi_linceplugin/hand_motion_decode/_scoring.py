@@ -13,7 +13,6 @@ LEVEL_WEIGHTS = {"easy": 0.25, "normal": 0.45, "hard": 0.30}
 EVALUATION_ORDER = ("easy", "hard", "normal")
 LEVELS = ("easy", "hard", "normal")
 TASKS = ("MA_CO", "MA_RT")
-LEVEL_TRIALS = {"easy": (100, 25), "hard": (0, 25), "normal": (20, 25)}
 
 
 def compute_r2(y_true: np.ndarray, y_pred: np.ndarray) -> float:

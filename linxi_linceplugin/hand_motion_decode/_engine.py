@@ -18,7 +18,6 @@ import numpy as np
 from ._scoring import (
     EVALUATION_ORDER,
     LEVELS,
-    LEVEL_TRIALS,
     TASKS,
     aggregate_scores,
     compute_latency_score,
@@ -131,6 +130,8 @@ def run_session(
     x_support: np.ndarray,
     y_support: np.ndarray,
     submission_factory: Callable[[], Any],
+    support_trials: int,
+    query_trials: int,
     weights_check: Callable[[], None] | None = None,
 ) -> tuple[dict[str, Any], np.ndarray]:
     session_id = session_id_of(task_name, level, horizon, session_key)
@@ -156,7 +157,6 @@ def run_session(
     result = score_session(
         y_query, prediction, total_latency_ms=total_latency_ms, session_id=session_id
     )
-    support_trials, query_trials = LEVEL_TRIALS[level]
     result.update({
         "task_name": task_name,
         "level": level,
@@ -248,6 +248,7 @@ def run_sweep(
     for lv in EVALUATION_ORDER:
         if level and lv != level:
             continue
+        cfg = data.LEVEL_CONFIGS[lv]
         for name in tasks:
             for spec in discovered[name][lv]:
                 if horizon and spec.horizon != horizon:
@@ -264,6 +265,7 @@ def run_sweep(
                     task_name=name, level=lv, horizon=spec.horizon,
                     session_key=spec.session_key, x_query=x_query, y_query=y_query,
                     x_support=x_support, y_support=y_support, submission_factory=factory,
+                    support_trials=cfg.support_trials, query_trials=cfg.query_trials,
                     weights_check=weights_check,
                 )
                 task_results[name][lv].append(result)
