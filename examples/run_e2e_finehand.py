@@ -2,7 +2,7 @@
 
 对账口径参照运动跨天解码赛道 linshufile_validation.md §1 的排除集先例，不设逐位 PARITY 门。
 """
-# allow: SIZE_OK — e2e 驱动按 examples 成例单文件自包含，计划限定本笔提交只含链配置与驱动两个文件。
+# allow: SIZE_OK — e2e 驱动按 examples 成例保持单文件自包含。
 from __future__ import annotations
 
 import argparse
@@ -317,7 +317,7 @@ def main(argv: list[str] | None = None) -> int:
                 fails.append(f"读回 counts 抽样不一致: {bad}/{len(idx)} 帧")
             print(f"[recon] 读回抽样 {len(idx)} 帧（前 100 + seed={SAMPLE_SEED} 随机 100）逐位一致: {'OK' if hit else 'FAIL'}")
 
-    # 层 1c：分数对任务 8 预置权重锚点（记录性门，防错权重/错 session 灾难性漂移）
+    # 层 1c：分数对官方预置权重 in-sample 锚点（来源 output/csv/mini_preset_scores.json；记录性门，防错权重/错 session 灾难性漂移）
     if set(scores) == set(EVAL_KEYS):
         anchor_delta = max(abs(scores[k] - PRESET_SCORES[k]) for k in EVAL_KEYS)
         print(f"[recon] 分数对预置权重锚点最大差: {anchor_delta:.3e}（门槛 {PRESET_TOLERANCE:g}）")
