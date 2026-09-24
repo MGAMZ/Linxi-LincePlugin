@@ -1,0 +1,28 @@
+# 临策·精细手部运动解码 — MINI_SESSION 端到端最小链路为 载入 → GRU 推理 → LinshuFile 导出，评测结果文件由推理算子写出。
+# 本链处理的 session：Data_heldin/2026060501（14 trial / 3,460 帧，heldin 布局含 keypoint 真值，推理算子评分依赖）。
+# query 侧单载入：TX 反算计数落根容器 binned_spikes，关键点序列落 behavior_recording，试次表落 trials。
+name: lince-e2e-finehand-mini
+linxi_plugin:
+  - linxi_linceplugin.fine_hand_decode.load_session
+  - linxi_linceplugin.fine_hand_decode.decode_baseline
+steps:
+  - stage: load
+    processor_name: "LoadLinceFineHandSession"
+    params:
+      session_dir: "__DATA_ROOT__/Data_heldin/2026060501"
+      recording_key: "query"
+  - stage: postprocess
+    processor_name: "FineHandGruInfer"
+    params:
+      session_dir: "__DATA_ROOT__/Data_heldin/2026060501"
+      model_dir: "__DATA_ROOT__/Participant_Implementation/Submission/model"
+      track_root: "__TRACK_ROOT__"
+      output_dir: "__OUTPUT_ROOT__"
+      device: "cpu"
+      num_threads: 4
+  - stage: export
+    processor_name: "WriteLinshuFile"
+    params:
+      output_path: "__OUTPUT_ROOT__/2026060501.ls"
+      ecephys_key: "query"
+      overwrite: true
