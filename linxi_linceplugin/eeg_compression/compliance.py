@@ -86,7 +86,7 @@ def check_np(orig_bin: str, orig_meta: str, comp_dir: str, decomp_dir: str,
     comp_dir :
         压缩结果目录。
     decomp_dir :
-        解压结果目录，允许为重建 bin 的单文件路径。
+        解压结果目录，或重建 bin 的单文件路径（单文件形态检索其同级目录）。
     block :
         逐位比对的单块字节上限。
     """
@@ -109,7 +109,10 @@ def check_np(orig_bin: str, orig_meta: str, comp_dir: str, decomp_dir: str,
     elif os.path.isfile(decomp_dir):
         as_meta = decomp_dir.lower().endswith(".meta")
         bin_candidates = [] if as_meta else [decomp_dir]
-        decomp_meta_candidates = [decomp_dir] if as_meta else []
+        if as_meta:
+            decomp_meta_candidates = [decomp_dir]
+        else:
+            decomp_meta_candidates = _candidates(os.path.dirname(decomp_dir), meta_name, ".meta")
     else:
         bin_candidates = _candidates(decomp_dir, bin_name, ".bin")
         decomp_meta_candidates = _candidates(decomp_dir, meta_name, ".meta")
