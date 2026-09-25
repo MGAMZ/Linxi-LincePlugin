@@ -1,6 +1,6 @@
 # 示例
 
-四条赛道的端到端示例。每条赛道含链配置 YAML 与驱动脚本，配置中的机器本地路径写成 `__DATA_ROOT__`、`__CODE_ROOT__`、`__TRACK_ROOT__`、`__OUTPUT_ROOT__` 四个占位符，由驱动在执行前替换为命令行传入的根目录。产物为 `.ls` 数据文件与同级的 `<数据文件名>.eval.json` 评测结果文件。
+五条赛道的端到端示例。每条赛道含链配置 YAML 与驱动脚本，配置中的机器本地路径写成 `__DATA_ROOT__`、`__CODE_ROOT__`、`__TRACK_ROOT__`、`__OUTPUT_ROOT__` 四个占位符，由驱动在执行前替换为命令行传入的根目录。产物为 `.ls` 数据文件与同级的 `<数据文件名>.eval.json` 评测结果文件。
 
 在仓库根目录、已安装 linxi 的 Python 环境中运行，安装方式见根目录 `README.md`。给出 `--golden` 时与官方基准逐字段比较并打印 `PARITY PASS/FAIL`。
 
@@ -67,3 +67,16 @@ python examples/run_e2e_finehand.py \
 ```
 
 驱动对同一输入连跑两次链并做自身决定论对账，一致时打印 `E2E MINI PASS`。`--golden` 指向的指纹文件不存在时留存本轮指纹，存在时逐成员比对。
+
+## 高保真脑电数据压缩赛道
+
+`e2e_eeg_compression.yaml`：np 子赛道冒烟夹具的最小链，链路为载入 → 重建质量 → 导出 `.ls`（置 `skip_raw_signals`，约 2 GB 原始信号不写入磁盘）→ 导出指标表。夹具是赛道仓库磁盘留存的冒烟产物，本链只读不写，不引入全量数据。
+
+```bash
+python examples/run_e2e_eeg_compression.py \
+  --track-root <高保真脑电数据压缩赛道仓库根目录> \
+  --output-root <产物输出目录> \
+  [--golden <指纹文件>]
+```
+
+驱动对同一输入连跑两次链并做自身决定论对账，判据为指标表两轮逐字节一致、`.ls` 排除集外成员两轮逐字节一致、指标 `cr` 与 `prd` 对赛道冒烟基准 `output/csv/baseline_np_smoke_meta_fixed.json` 逐位一致、合规五门全过，全部通过时打印 `E2E EEG COMPRESSION PASS` 并以 0 退出。`--golden` 指向的指纹文件不存在时留存本轮指纹，存在时把占位符化后的指标表逐字段比对，路径字段以 `__TRACK_ROOT__` 记法留存，指纹跨机器可迁移。

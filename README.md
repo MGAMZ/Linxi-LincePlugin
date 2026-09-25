@@ -69,6 +69,15 @@ python examples/run_e2e_finehand.py \
   [--golden <指纹文件>]
 ```
 
+高保真脑电数据压缩赛道 np 子赛道。链配置为 `examples/e2e_eeg_compression.yaml`，链路为载入 → 重建质量 → 导出 `.ls`（置 `skip_raw_signals`，原始信号不写入磁盘）→ 导出指标表，夹具为赛道仓库磁盘留存的冒烟产物，链对其只读。驱动对同一输入连跑两次链并做自身决定论对账，另以赛道冒烟基准 `output/csv/baseline_np_smoke_meta_fixed.json` 对 `cr` 与 `prd` 做逐位锚点并核验合规五门，打印 `E2E EEG COMPRESSION PASS/FAIL`；`--golden` 指向的指纹文件不存在时留存本轮指纹，存在时逐字段比对，指纹内路径按占位符记法留存，跨机器可迁移：
+
+```bash
+python examples/run_e2e_eeg_compression.py \
+  --track-root <高保真脑电数据压缩赛道仓库根目录> \
+  --output-root <产物输出目录> \
+  [--golden <指纹文件>]
+```
+
 示例配置内的数据路径都是占位符，用于自有流水线时替换为实际路径，从代码构建并运行流水线的完整方法以 `examples/run_e2e_wf.py` 的 `main` 函数为准。各示例的链配置与判据说明见 `examples/README.md`。
 
 ## 算子注册
