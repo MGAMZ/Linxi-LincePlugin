@@ -33,7 +33,7 @@ ANCHOR_RELPATH = Path("output/csv/baseline_np_smoke_meta_fixed.json")
 GATE_NAMES = ("np_rebuilt_bin", "np_bin_size_identical", "np_bin_int16_aligned",
               "np_meta_in_comp", "np_meta_restored_identical")
 # 排除集五项：file_create_date、notes 内时间衍生字段、history 记录的时间戳与耗时、from-value 目录名、环境信息键。
-ROOT_ATTR_EXCLUDE = ("file_create_date", "python_environments", "python_environmenets")
+ROOT_ATTR_EXCLUDE = ("file_create_date", "python_environments")
 HISTORY_ATTR_EXCLUDE = ("timestamp", "duration")
 NOTE_TIME_KEYS = ("total_latency_ms", "latency_per_bin_ms", "latency_score", "session_score", "adapt_seconds")
 _FROM_VALUE_RE = re.compile(r"from-value-[0-9a-f]{6,}")
