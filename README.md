@@ -1,6 +1,6 @@
 # Linxi-LincePlugin
 
-临策算法竞赛的临析引擎插件仓库，为手写运动跨天解码、精细手部运动解码、记忆状态跨个体跨天解码、硬膜外运动解码四条赛道提供数据载入、baseline 解码与漂移指标算子，并提供跨赛道共用的 LinshuFile 导出与评测结果文件导出算子。一条 pipeline YAML 即可处理原始数据，输出 `.ls` 数据文件与同级的 `<数据文件名>.eval.json` 评测结果文件。
+临策算法竞赛的临析引擎插件仓库，为手写运动跨天解码、精细手部运动解码、记忆状态跨个体跨天解码、硬膜外运动解码四条赛道提供数据载入、baseline 解码与漂移指标算子，为高保真脑电数据压缩赛道提供三种数据形态载入与重建质量评估算子，并提供跨赛道共用的 LinshuFile 导出与评测结果文件导出算子。一条 pipeline YAML 即可处理原始数据，输出 `.ls` 数据文件与同级的 `<数据文件名>.eval.json` 评测结果文件。
 
 ## 安装
 
@@ -73,7 +73,9 @@ python examples/run_e2e_finehand.py \
 
 ## 算子注册
 
-算子模块按赛道分为五个子包，分别对应运动跨天解码 `hand_motion_decode`、精细手部运动解码 `fine_hand_decode`、记忆状态跨个体跨天解码 `memory_state_decode`、硬膜外运动解码 `epidural_motion_decode`、共用导出 `export`。在流水线配置中用 `linxi_plugin` 字段逐模块导入触发注册，一条链只需列出该链用到的模块：
+算子模块按赛道分为六个子包，分别对应运动跨天解码 `hand_motion_decode`、精细手部运动解码 `fine_hand_decode`、记忆状态跨个体跨天解码 `memory_state_decode`、硬膜外运动解码 `epidural_motion_decode`、高保真脑电数据压缩 `eeg_compression`、共用导出 `export`。在流水线配置中用 `linxi_plugin` 字段逐模块导入触发注册，一条链只需列出该链用到的模块：
+
+`eeg_compression` 子包内 `scoring.py` 与 `compliance.py` 是赛题口径的评分核心与判题格式合规函数库，不含算子；算子模块为三个载入算子与一个重建质量算子，质量算子在载入算子之外独立直接读取磁盘上的原始与重建产物，不依赖链上先前载入的记录。
 
 ```yaml
 linxi_plugin:
@@ -91,6 +93,11 @@ linxi_plugin:
   - linxi_linceplugin.epidural_motion_decode.load_session
   - linxi_linceplugin.epidural_motion_decode.action_windows
   - linxi_linceplugin.epidural_motion_decode.decode_baseline
+  # eeg_compression 赛道
+  - linxi_linceplugin.eeg_compression.load_np_stream
+  - linxi_linceplugin.eeg_compression.load_ieeg_edf
+  - linxi_linceplugin.eeg_compression.load_trodes_rec
+  - linxi_linceplugin.eeg_compression.recon_quality
   # 共用导出
   - linxi_linceplugin.export.linshufile
   - linxi_linceplugin.export.ieeg_linshufile
@@ -103,12 +110,16 @@ linxi_plugin:
 | load | `LoadLinceFineHandSession` | 载入单个精细手部赛题 session 的 npz 形态数据 |
 | load | `LoadLinceDpaSession` | 载入单个 DPA session 的 units-based NWB 数据 |
 | load | `LoadLinceEpiSession` | 载入含 BDF 三件套的单个硬膜外 session 目录 |
+| load | `LoadCompress2BciNpStream` | 载入压缩赛题 np 子赛道 SpikeGLX .ap.bin/.ap.meta 文件对 |
+| load | `LoadCompress2BciIeegEdf` | 载入压缩赛题 ieeg 子赛道 BIDS EDF 与伴生元数据 |
+| load | `LoadCompress2BciTrodesRec` | 载入压缩赛题 flex 子赛道 Trodes .rec |
 | preprocess | `EpiExtractActionWindows` | 按评测契约截取逐试次动作窗口并扩展试次表 |
 | postprocess | `BaselineDecodeInfer` | 预置权重 WF/GRU baseline 解码与评分 |
 | postprocess | `FineHandGruInfer` | 精细手部赛道预置权重 GRU 推理与四分量评分 |
 | postprocess | `DpaBaselineInfer` | DPA 赛道 baseline 分类解码，按子挑战选择方法 |
 | postprocess | `EpiBaselineInfer` | 硬膜外赛道 baseline 解码，统一 8 分类 |
 | analyze | `LinceDriftAnalysis` | 跨天漂移指标 |
+| quality | `Compress2BciReconQuality` | 原始与重建产物对比的 PRD/CR 指标与判题格式合规结果 |
 | export | `LinceWriteLinshuFile` | 将 ecephys 记录导出为 `.ls` |
 | export | `LinceWriteIeegLinshuFile` | 将 `context.ieeg` 连续电位记录导出为 `.ls` |
 | export | `ExportEvalMetrics` | 将 `context.metrics` 写出为 `.ls` 同级 `<数据文件名>.eval.json` |
@@ -231,6 +242,43 @@ linxi_plugin:
 | `train_level` | "train" | 质心与 train 末日取样的层名 |
 | `holdout_levels` | `None` → ("easy", "normal", "hard") | gap×cos 相关的取样层集合 |
 | `agg_level` | "hard" | 批次聚合均值针对的层名 |
+| `name` | `None` | 算子实例名 |
+
+### LoadCompress2BciNpStream
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `input_path` | 必填 | np 子赛道 SpikeGLX `*.ap.bin` 文件，或恰含一个 bin 及其配套 `.ap.meta` 的目录 |
+| `recording_key` | "query" | 写入 `context.ecephys` 的键 |
+| `name` | `None` | 算子实例名 |
+
+### LoadCompress2BciIeegEdf
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `input_path` | 必填 | ieeg 子赛道 BIDS 受试者目录或单个 `*.edf` |
+| `recording_key` | "query" | 写入 `context.ieeg` 的键 |
+| `name` | `None` | 算子实例名 |
+
+### LoadCompress2BciTrodesRec
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `input_path` | 必填 | flex 子赛道 Trodes `*.rec` 文件，须含 XML 配置头 |
+| `recording_key` | "query" | 写入 `context.ecephys` 的键 |
+| `name` | `None` | 算子实例名 |
+
+### Compress2BciReconQuality
+
+按子赛道对比磁盘上的原始与重建产物，结果 dict 写入 `context.metrics`，键默认 `recon_quality_<子赛道>`。字段 `cr` 为压缩比（未提供 `compressed_path` 时为 null），`metrics` 为子赛道装载指标，`prd` 为开方后的小数比值，`compliance` 为判题格式逐门结果。
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `subtrack` | 必填 | `np`、`ieeg` 或 `flex`，其余值报错 |
+| `original_path` | 必填 | np 为 `*.ap.bin`（须有配套 `.ap.meta`），ieeg 为 BIDS 目录或单个 EDF，flex 为 `*.rec` |
+| `rebuilt_path` | 必填 | np 为重建 `*.bin` 或解压结果目录，ieeg 为重建结果目录，flex 为重建 `*.rec` |
+| `compressed_path` | `None` | 压缩结果目录，np 必填以支撑 CR 与 meta 合规门，ieeg 与 flex 选填仅用于 CR |
+| `metrics_key` | `None` | `context.metrics` 写入键，未设时取 `recon_quality_<子赛道>` |
 | `name` | `None` | 算子实例名 |
 
 ### LinceWriteLinshuFile
