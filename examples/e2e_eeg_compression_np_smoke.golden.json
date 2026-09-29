@@ -1,0 +1,54 @@
+{
+  "fingerprint_version": 1,
+  "chain": "eeg_compression_np_smoke",
+  "eval_sha256_tokenized": "adfe639dc63a64f145ec9804325761225d2005233e6d6ca27f424a3fd6d9d51e",
+  "metrics_table": {
+    "session_id": null,
+    "tier": null,
+    "span": null,
+    "metrics": null,
+    "drift_targets": null,
+    "recon_quality_np": {
+      "subtrack": "np",
+      "original": "__TRACK_ROOT__/output/work/smoke/np_smoke.ap.bin",
+      "rebuilt": "__TRACK_ROOT__/output/work/smoke/np_decomp/np_reconstructed.ap.bin",
+      "compressed": "__TRACK_ROOT__/output/work/smoke/np_comp",
+      "cr": 7.144352726691605,
+      "metrics": {
+        "prd": 0.08676457854200595,
+        "n_channels": 385,
+        "n_samples_per_channel": 2597402
+      },
+      "compliance": {
+        "subtrack": "np",
+        "gates": [
+          {
+            "gate": "np_rebuilt_bin",
+            "status": "pass",
+            "reason": "重建 bin 定位: __TRACK_ROOT__/output/work/smoke/np_decomp/np_reconstructed.ap.bin"
+          },
+          {
+            "gate": "np_bin_size_identical",
+            "status": "pass",
+            "reason": "重建 bin 字节数与原始一致: 1999999540"
+          },
+          {
+            "gate": "np_bin_int16_aligned",
+            "status": "pass",
+            "reason": "重建 bin 按行宽 770 整除对齐，共 2597402 行"
+          },
+          {
+            "gate": "np_meta_in_comp",
+            "status": "pass",
+            "reason": "压缩结果内的 meta: __TRACK_ROOT__/output/work/smoke/np_comp/meta/np_smoke.ap.meta"
+          },
+          {
+            "gate": "np_meta_restored_identical",
+            "status": "pass",
+            "reason": "恢复 meta 与原始逐位一致: __TRACK_ROOT__/output/work/smoke/np_decomp/np_smoke.ap.meta"
+          }
+        ]
+      }
+    }
+  }
+}
