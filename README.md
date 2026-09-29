@@ -90,6 +90,7 @@ python examples/run_e2e_eeg_compression.py \
 - 压缩赛道 `eeg_compression`
 - 共用导出 `export`。
 
+在配置文件头添加如下内容即可导入插件包
 ```yaml
 linxi_plugin:
   - linxi_linceplugin
@@ -120,13 +121,31 @@ linxi_plugin:
 ## 数据产物
 
 `.ls` 数据文件遵循 LinshuFile 格式，保存为 Zarr 目录。
-行为序列写入根字段 `behavior_recording`，分箱放电计数写入根字段 `binned_spikes`，硬膜外赛道与压缩赛道 ieeg 子赛道的连续信号写入 `context.ieeg` 容器。
 
-评测结果文件 `<数据文件名>.eval.json` 与 `.ls` 同目录、同命名根，顶层键为 `session_id`、`tier`、`span`、`metrics`、`drift_targets`，缺失字段写入 null。
-`tier` 在运动流水线为评测难度 `easy`、`normal`、`hard`，在硬膜外流水线为动作类型，单动作记 `single`、组合动作记 `dual`。`span` 在运动流水线为 normal 与 hard 任务的时程片段。`drift_targets` 为漂移分析的目标会话清单。`metrics` 由各类流水线自行填充：
+主要数据字段的存放方式如下：
+- 行为序列写入根字段 `behavior_recording`
+- 分箱放电计数写入根字段 `binned_spikes`
+- 硬膜外赛道与压缩赛道 ieeg 子赛道的连续信号写入 `context.ieeg` 容器
+
+评测结果文件 `<数据文件名>.eval.json` 与 `.ls` 同目录、同命名根，顶层键包含：
+- `session_id`
+- `tier`
+  - 运动赛道为评测难度
+    - `easy`
+    - `normal`
+    - `hard`
+  - 硬膜外解码为动作类型
+    - 单动作记 `single`
+    - 组合动作记 `dual`
+- `span`: normal 与 hard 任务的时程片段
+- `metrics`: 由各类流水线自行填充，详情可见附表
+- `drift_targets`: 漂移分析的目标会话清单
+- 缺失字段写入 null。
+
+### 附表：metric字段
 
 | 流水线 | metrics 内容 |
-|---|---|
+| --- | --- |
 | 运动 | `n_bins`、`r2_x`、`r2_y`、`r2_mean_raw`、`r2_mean`、`total_latency_ms`、`latency_per_bin_ms`、`latency_score`、`session_score`、`support_trials`、`query_trials` |
 | 记忆 | `split`、`subject`、`session_date`、`mem_acc`、`corr_acc`、`session_score`、`n_trials`、`method` |
 | 硬膜外 | `macro_f1`、`per_class_f1`、`n_eval_trials`、`n_train_trials`、`classes`、`method` |
