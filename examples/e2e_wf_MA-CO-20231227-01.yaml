@@ -1,7 +1,6 @@
-# 临策·运动跨天解码 — WF baseline 端到端最小链路为 载入 → 解码推理 → 漂移分析 → LinshuFile 导出。
-# 本链处理的 session：MA_CO / easy / MA-CO-20231227-01。
-# query = private/MA_CO/easy/heldout 共 25 trials，为评测侧，support = 同日 public/MA_CO/easy/heldin 共 100 trials，为校准侧。
-# 两个 load 步骤各自显式传 input_path，query 侧最后载入，context.session 为评测侧目录标签。
+# 运动赛道 WF 基线的端到端最小示例，流水线依次完成载入、解码推理、漂移分析、导出 .ls。
+# 处理的 session 为 MA-CO-20231227-01，任务 MA_CO，难度 easy。
+# 校准数据 support 取自 public/MA_CO/easy/heldin，共 100 个 trial。评测数据 query 取自 private/MA_CO/easy/heldout，共 25 个 trial，放在最后载入。
 name: lince-e2e-wf-MA-CO-20231227-01
 linxi_plugin:
   - linxi_linceplugin
@@ -41,7 +40,7 @@ steps:
     params:
       output_path: "__OUTPUT_ROOT__/MA-CO-20231227-01.ls"
       ecephys_key: "query"
-      # 本链 trials 表只含结构列，预测写入 query 记录的 auxiliary_channels，评分写入评测结果文件，因此 require_eval_cols 设为 false
+      # trials 表只含结构列，解码预测位于 query 记录的 auxiliary_channels，评分位于评测结果文件
       session_scalar_cols: []
       require_eval_cols: false
       on_lossy: "warn"

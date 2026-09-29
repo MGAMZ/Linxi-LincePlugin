@@ -1,7 +1,5 @@
-# 临策·记忆状态跨个体跨天解码 — DPA c1 同天基线端到端最小链路为 载入 → 基线推理 → LinshuFile 导出 → 评测结果文件导出。
-# 本链处理的 session：challenge1 / sub-m091_ses-20210608 / train 共 158 trial 带标签。
-# 链上推理 method=baseline：challenge1 为 unit_space 特征同天五折 CV 基线，指标与 output/csv/baseline_c1_cv.json 对账。
-# 单输入链：context.session = 载入文件主干。
+# 记忆赛道 challenge1 同天基线的端到端最小示例，流水线依次完成载入、基线推理、导出 .ls 与评测结果文件。
+# 处理的 session 为 sub-m091_ses-20210608，challenge1 的训练日，共 158 个 trial，全部带标签。
 name: lince-e2e-dpa-sub-m091_ses-20210608
 linxi_plugin:
   - linxi_linceplugin

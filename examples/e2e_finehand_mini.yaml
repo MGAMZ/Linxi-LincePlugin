@@ -1,6 +1,6 @@
-# 临策·精细手部运动解码 — MINI_SESSION 端到端最小链路为 载入 → GRU 推理 → LinshuFile 导出，评测结果文件由推理算子写出。
-# 本链处理的 session：Data_heldin/2026060501（14 trial / 3,460 帧，heldin 布局含 keypoint 真值，推理算子评分依赖）。
-# query 侧单载入：TX 反算计数落根容器 binned_spikes，关键点序列落 behavior_recording，试次表落 trials。
+# 精细手部赛道的端到端最小示例，流水线依次完成载入、GRU 推理、导出 .ls，评测结果文件由推理算子写出。
+# 处理的 session 为 Data_heldin/2026060501，共 14 个 trial、3460 帧。
+# heldin 目录含关键点真值数据，推理算子用它计算评分。
 name: lince-e2e-finehand-mini
 linxi_plugin:
   - linxi_linceplugin
