@@ -4,11 +4,7 @@
 # 两个 load 步骤各自显式传 input_path，query 侧最后载入，context.session 为评测侧目录标签。
 name: lince-e2e-wf-MA-CO-20231227-01
 linxi_plugin:
-  - linxi_linceplugin.hand_motion_decode.load_session
-  - linxi_linceplugin.hand_motion_decode.decode_baseline
-  - linxi_linceplugin.hand_motion_decode.drift_analysis
-  - linxi_linceplugin.export.linshufile
-  - linxi_linceplugin.export.eval_metrics
+  - linxi_linceplugin
 steps:
   - stage: load
     processor_name: "LoadLinceSession"

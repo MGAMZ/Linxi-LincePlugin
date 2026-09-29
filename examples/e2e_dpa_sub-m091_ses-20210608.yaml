@@ -4,10 +4,7 @@
 # 单输入链：context.session = 载入文件主干。
 name: lince-e2e-dpa-sub-m091_ses-20210608
 linxi_plugin:
-  - linxi_linceplugin.memory_state_decode.load_session
-  - linxi_linceplugin.memory_state_decode.decode_baseline
-  - linxi_linceplugin.export.linshufile
-  - linxi_linceplugin.export.eval_metrics
+  - linxi_linceplugin
 steps:
   - stage: load
     processor_name: "LoadLinceDpaSession"

@@ -4,9 +4,7 @@
 # 导出置 skip_raw_signals，.ls 仅承载记录元数据与处理历史，约 2 GB 的 int16 信号不写入磁盘；指标表在同级 np_smoke.eval.json。
 name: lince-e2e-eeg-compression-np-smoke
 linxi_plugin:
-  - linxi_linceplugin.eeg_compression.load_np_stream
-  - linxi_linceplugin.eeg_compression.recon_quality
-  - linxi_linceplugin.export.eval_metrics
+  - linxi_linceplugin
 steps:
   - stage: load
     processor_name: "LoadCompress2BciNpStream"

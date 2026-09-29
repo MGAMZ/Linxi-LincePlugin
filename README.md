@@ -79,7 +79,6 @@ python examples/run_e2e_eeg_compression.py \
 ```
 
 各配置里的数据路径都是占位符，搭自己的流水线时替换为实际路径即可。
-配置中的 `linxi_plugin` 字段列出了该流水线用到的全部算子模块。
 
 ## 算子注册
 
@@ -91,33 +90,9 @@ python examples/run_e2e_eeg_compression.py \
 - 压缩赛道 `eeg_compression`
 - 共用导出 `export`。
 
-在流水线配置中用 `linxi_plugin` 字段逐模块导入触发注册，一条流水线只需列出它用到的模块：
-
 ```yaml
 linxi_plugin:
-  # hand_motion_decode 赛道
-  - linxi_linceplugin.hand_motion_decode.load_session
-  - linxi_linceplugin.hand_motion_decode.decode_baseline
-  - linxi_linceplugin.hand_motion_decode.drift_analysis
-  # fine_hand_decode 赛道
-  - linxi_linceplugin.fine_hand_decode.load_session
-  - linxi_linceplugin.fine_hand_decode.decode_baseline
-  # memory_state_decode 赛道
-  - linxi_linceplugin.memory_state_decode.load_session
-  - linxi_linceplugin.memory_state_decode.decode_baseline
-  # epidural_motion_decode 赛道
-  - linxi_linceplugin.epidural_motion_decode.load_session
-  - linxi_linceplugin.epidural_motion_decode.action_windows
-  - linxi_linceplugin.epidural_motion_decode.decode_baseline
-  # eeg_compression 赛道
-  - linxi_linceplugin.eeg_compression.load_np_stream
-  - linxi_linceplugin.eeg_compression.load_ieeg_edf
-  - linxi_linceplugin.eeg_compression.load_trodes_rec
-  - linxi_linceplugin.eeg_compression.recon_quality
-  # 共用导出
-  - linxi_linceplugin.export.linshufile
-  - linxi_linceplugin.export.ieeg_linshufile
-  - linxi_linceplugin.export.eval_metrics
+  - linxi_linceplugin
 ```
 
 | stage | processor_name | 功能 |

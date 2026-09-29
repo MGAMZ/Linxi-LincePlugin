@@ -3,11 +3,7 @@
 # dual trigger 编码与 single 同码不同义，范式判定与标签映射在载入层按目录名完成，下游只消费 label 列。
 name: lince-e2e-epi-P01_20241112-dual-MA
 linxi_plugin:
-  - linxi_linceplugin.epidural_motion_decode.load_session
-  - linxi_linceplugin.epidural_motion_decode.action_windows
-  - linxi_linceplugin.epidural_motion_decode.decode_baseline
-  - linxi_linceplugin.export.ieeg_linshufile
-  - linxi_linceplugin.export.eval_metrics
+  - linxi_linceplugin
 steps:
   - stage: load
     processor_name: "LoadLinceEpiSession"

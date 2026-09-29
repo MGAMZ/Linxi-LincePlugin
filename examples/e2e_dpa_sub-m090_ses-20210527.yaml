@@ -5,10 +5,7 @@
 # 逐标签 golden 对照行 = output/csv/method_selection.json 选定法在 methods_results.json 的 m090 eval-1 行。
 name: lince-e2e-dpa-sub-m090_ses-20210527
 linxi_plugin:
-  - linxi_linceplugin.memory_state_decode.load_session
-  - linxi_linceplugin.memory_state_decode.decode_baseline
-  - linxi_linceplugin.export.linshufile
-  - linxi_linceplugin.export.eval_metrics
+  - linxi_linceplugin
 steps:
   - stage: load
     processor_name: "LoadLinceDpaSession"

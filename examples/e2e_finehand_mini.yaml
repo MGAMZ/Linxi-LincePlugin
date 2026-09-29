@@ -3,8 +3,7 @@
 # query 侧单载入：TX 反算计数落根容器 binned_spikes，关键点序列落 behavior_recording，试次表落 trials。
 name: lince-e2e-finehand-mini
 linxi_plugin:
-  - linxi_linceplugin.fine_hand_decode.load_session
-  - linxi_linceplugin.fine_hand_decode.decode_baseline
+  - linxi_linceplugin
 steps:
   - stage: load
     processor_name: "LoadLinceFineHandSession"

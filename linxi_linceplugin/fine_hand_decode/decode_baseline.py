@@ -12,8 +12,6 @@ from typing import TYPE_CHECKING, Any
 
 import h5py
 import numpy as np
-import torch
-from torch import nn
 
 from linxi.logger import logger
 from linxi.processor import PROCESS_STAGES, DefaultProcessor, register_as_linxi_processor
@@ -21,6 +19,8 @@ from linxi.processor import PROCESS_STAGES, DefaultProcessor, register_as_linxi_
 from .load_session import FineHandSessionArrays, _partition_dir, read_finehand_session
 
 if TYPE_CHECKING:
+    import torch
+
     from linxi.fabric.linxi_context import LinxiContext
 
 __all__ = ["EVAL_METRIC_FIELDS", "FineHandGruInfer"]
@@ -32,22 +32,29 @@ _OUTPUT_DIM = 63
 _SIDECAR_SUFFIX = ".eval.json"
 
 
-class _SimpleGRUModel(nn.Module):
-    """与官方提交 runtime 结构同构的单层因果 GRU 解码模型。"""
+def _build_gru_model(input_size: int, hidden_size: int) -> torch.nn.Module:
+    """构建与官方提交 runtime 结构一致的单层因果 GRU 解码模型，torch 在此处延迟导入。"""
+    import torch
+    from torch import nn
 
-    def __init__(self, input_size: int, hidden_size: int):
-        super().__init__()
-        self.input_projection = nn.Linear(input_size, hidden_size)
-        self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True)
-        self.output = nn.Linear(hidden_size, _OUTPUT_DIM)
+    class SimpleGRUModel(nn.Module):
+        def __init__(self, input_size: int, hidden_size: int):
+            super().__init__()
+            self.input_projection = nn.Linear(input_size, hidden_size)
+            self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True)
+            self.output = nn.Linear(hidden_size, _OUTPUT_DIM)
 
-    def forward(self, values: torch.Tensor, hidden: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
-        values = torch.tanh(self.input_projection(values))
-        values, hidden = self.gru(values, hidden)
-        return self.output(values), hidden
+        def forward(self, values: torch.Tensor, hidden: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+            values = torch.tanh(self.input_projection(values))
+            values, hidden = self.gru(values, hidden)
+            return self.output(values), hidden
+
+    return SimpleGRUModel(input_size, hidden_size)
 
 
 def _resolve_device(requested: str) -> torch.device:
+    import torch
+
     if requested == "auto":
         requested = "cuda" if torch.cuda.is_available() else "cpu"
     if requested == "cuda" and not torch.cuda.is_available():
@@ -55,7 +62,9 @@ def _resolve_device(requested: str) -> torch.device:
     return torch.device(requested)
 
 
-def _load_model(model_dir: str, session_id: str, device: torch.device) -> tuple[_SimpleGRUModel, dict[str, Any]]:
+def _load_model(model_dir: str, session_id: str, device: torch.device) -> tuple[torch.nn.Module, dict[str, Any]]:
+    import torch
+
     path = Path(model_dir) / session_id / "checkpoint.pt"
     if not path.is_file():
         raise FileNotFoundError(f"{session_id}: 官方 checkpoint 不存在，期望路径 {path}")
@@ -64,7 +73,7 @@ def _load_model(model_dir: str, session_id: str, device: torch.device) -> tuple[
         raise ValueError(f"{path}: checkpoint session_id={checkpoint['session_id']!r} 与目标 session {session_id!r} 不符")
     if checkpoint["input_size"] != _INPUT_SIZE:
         raise ValueError(f"{path}: session {session_id} 的 input_size={checkpoint['input_size']}，512 通道输入契约不符")
-    model = _SimpleGRUModel(int(checkpoint["input_size"]), int(checkpoint["hidden_size"]))
+    model = _build_gru_model(int(checkpoint["input_size"]), int(checkpoint["hidden_size"]))
     model.load_state_dict(checkpoint["state_dict"])
     return model.to(device).eval(), checkpoint
 
@@ -121,11 +130,13 @@ class FineHandGruInfer(DefaultProcessor):
 
     def _predict_trials(
         self,
-        model: _SimpleGRUModel,
+        model: torch.nn.Module,
         checkpoint: dict[str, Any],
         arrays: FineHandSessionArrays,
         device: torch.device,
     ) -> list[np.ndarray]:
+        import torch
+
         tx_rate = np.ascontiguousarray(arrays.counts / arrays.dt_sec[:, None], dtype=np.float32)
         mean = checkpoint["feature_mean"].numpy()
         std = checkpoint["feature_std"].numpy()
@@ -170,6 +181,8 @@ class FineHandGruInfer(DefaultProcessor):
         if arrays.keypoint is None:
             raise ValueError(f"{arrays.session_id}: trial npz 无 keypoint 真值，无法评分")
         if self.num_threads is not None:
+            import torch
+
             torch.set_num_threads(self.num_threads)
         scoring = _load_scoring(self.track_root)
         device = _resolve_device(self.device)
